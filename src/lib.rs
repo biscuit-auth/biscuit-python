@@ -302,29 +302,37 @@ pub struct BlockBuilder(biscuit::builder::BlockBuilder);
 #[pymethods]
 impl BlockBuilder {
     /// Adds a Datalog fact
-    pub fn add_fact(&mut self, fact: &str) -> Option<()> {
-        self.0.add_fact(fact).unwrap();
-        None
+    pub fn add_fact(&mut self, fact: &str) -> PyResult<()> {
+        match self.0.add_fact(fact) {
+            Ok(_) => Ok(()),
+            Err(error) => Err(DataLogError::new_err(error.to_string()))
+        }
     }
 
     /// Adds a Datalog rule
-    pub fn add_rule(&mut self, rule: &str) ->  Option<()> {
-        self.0.add_rule(rule).unwrap();
-        None
+    pub fn add_rule(&mut self, rule: &str) ->  PyResult<()> {
+        match self.0.add_rule(rule) {
+            Ok(_) => Ok(()),
+            Err(error) => Err(DataLogError::new_err(error.to_string()))
+        }
     }
 
     /// Adds a check
     ///
     /// All checks, from authorizer and token, must be validated to authorize the request
-    pub fn add_check(&mut self, check: &str) -> Option<()> {
-        self.0.add_check(check).unwrap();
-        None
+    pub fn add_check(&mut self, check: &str) -> PyResult<()> {
+        match self.0.add_check(check) {
+            Ok(_) => Ok(()),
+            Err(error) => Err(DataLogError::new_err(error.to_string()))
+        }
     }
 
     /// Adds facts, rules, checks and policies as one code block
-    pub fn add_code(&mut self, source: &str) -> Option<()> {
-        self.0.add_code(source).unwrap();
-        None
+    pub fn add_code(&mut self, source: &str) -> PyResult<()> {
+        match self.0.add_code(source) {
+            Ok(_) => Ok(()),
+            Err(error) => Err(DataLogError::new_err(error.to_string()))
+        }
     }
 }
 
@@ -432,9 +440,7 @@ impl PrivateKey {
     }
 }
 
-/// A Python module implemented in Rust. The name of this function must match
-/// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
-/// import the module.
+
 #[pymodule]
 fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<KeyPair>()?;
