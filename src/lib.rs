@@ -334,8 +334,13 @@ pub struct KeyPair(biscuit::KeyPair);
 #[pymethods]
 impl KeyPair {
     #[new]
-    pub fn new() -> KeyPair {
+    pub fn new() -> Self {
         KeyPair(biscuit::KeyPair::new())
+    }
+
+    #[classmethod]
+    pub fn from_existing(_: &PyType, private_key: PrivateKey) -> Self {
+        KeyPair(biscuit::KeyPair::from(private_key.0))
     }
 
     #[getter]
@@ -370,20 +375,26 @@ impl PublicKey {
     pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PublicKey> {
         match biscuit::PublicKey::from_bytes(data) {
             Ok(key) => Ok(PublicKey(key)),
-            Err(error) => Err(AuthorizationError::new_err(error.to_string())),
+            Err(error) => Err(PyValueError::new_err(error.to_string())),
         }
     }
 
     /// Deserializes a public key from a hexadecimal string
     #[classmethod]
     pub fn from_hex(_: &PyType, data: &str) -> PyResult<PublicKey> {
-        let data = hex::decode(data).unwrap();
-        let key = biscuit::PublicKey::from_bytes(&data).unwrap();
-        Ok(PublicKey(key))
+        let data = match hex::decode(data) {
+            Ok(data) => data,
+            Err(error) => return Err(PyValueError::new_err(error.to_string())),
+        };
+        match biscuit::PublicKey::from_bytes(&data) {
+            Ok(key) => Ok(PublicKey(key)),
+            Err(error) => Err(PyValueError::new_err(error.to_string())),
+        }
     }
 }
 
 #[pyclass]
+#[derive(Clone)]
 pub struct PrivateKey(biscuit::PrivateKey);
 
 #[pymethods]
