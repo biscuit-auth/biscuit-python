@@ -1,78 +1,110 @@
+import json
+import os
+
 import pytest
+
 import biscuit_auth
 
-VALID_HEX_KEYPAIR = {
-    "public": "e6fe4661710cfc3b7a259258a2505ebf8ca5e543adcc944c23470e4e5e6585e8",
-    "private": "39595423ef9c4f359223fba7b30112435d9f446f57f6a53c36d79026cc0331c2"
-}
+with open("samples/samples.json") as samples_json:
+    TEST_CASES = json.load(samples_json)
 
+def get_test_keys():
+    return biscuit_auth.PrivateKey.from_hex(TEST_CASES["root_private_key"]), biscuit_auth.PublicKey.from_hex(TEST_CASES["root_public_key"])
 
-'''
-Here's a valid Base64 encoded Biscuit, with the following attributes:
-Biscuit {
-    symbols: ["authority", "ambient", "resource", "operation", "right", "current_time", "revocation_id", "/a/file1.txt", "read", "write", "/a/file2.txt", "/a/file3.txt"]
-    authority: Block {
-            symbols: ["/a/file1.txt", "read", "write", "/a/file2.txt", "/a/file3.txt"]
-            version: 2
-            context: ""
-            facts: [
-                right("/a/file1.txt", "read"),
-                right("/a/file1.txt", "write"),
-                right("/a/file2.txt", "read"),
-                right("/a/file3.txt", "write")
-            ]
-            rules: []
-            checks: []
-        }
-    blocks: [
+def get_authorizer(biscuit, world: dict):
+    authorizer = biscuit.authorizer()
+    for fact in world["facts"]:
+        authorizer.add_fact(fact)
+    for rule in world["rules"]:
+        authorizer.add_rule(rule)
+    for check in world["checks"]:
+        authorizer.add_check(check)
+    for policy in world["policies"]:
+        authorizer.add_policy(policy)
+    return authorizer
 
-    ]
-}
-'''
-VALID_TOKEN_BASE64 = "EtsBCnEKDC9hL2ZpbGUxLnR4dAoEcmVhZAoFd3JpdGUKDC9hL2ZpbGUyLnR4dAoML2EvZmlsZTMudHh0GAIiDAoKCAQSAhgHEgIYCCIMCgoIBBICGAcSAhgJIgwKCggEEgIYChICGAgiDAoKCAQSAhgLEgIYCRIkCAASIHx15tkXJCiAWinyuBMn-Vf5qYQl4by9ZP_9yBe0wDyTGkDhgkDt8XwW0yIj_xbtE2fwYVrq0LM8PITiQx7jnVl8OwKyWQiUCSy8uqdWv_XqQaBzVDf2hK7857TqHTqE8zEFIiIKIGjlwhdfjrob0rFWOkCmxBxMeiyc5VkxALSgQKVGcJiV"
+def test_1_basic():
+    test_case = TEST_CASES["testcases"][0]
+    private_root, public_root = get_test_keys()
 
-def test_keys():
-    public_key_from_hex = biscuit_auth.PublicKey.from_hex(VALID_HEX_KEYPAIR["public"])
+    # This example should fail to authorize
+    with open(os.path.join("samples", test_case["filename"]), "rb") as biscuit_fp:
+        test_biscuit = biscuit_auth.Biscuit.from_bytes(biscuit_fp.read(), public_root)
+    authorizer = get_authorizer(test_biscuit, test_case["validations"][""]["world"])
+
+    with pytest.raises(biscuit_auth.AuthorizationError):
+        authorizer.authorize()
+
+    # Now lets make sure we can build the same token that also fails
+    kp = biscuit_auth.KeyPair.from_existing(private_root)
+
+    builder = biscuit_auth.BiscuitBuilder()
+    for fact in test_case["token"][0]["code"].strip().split("\n"):
+        builder.add_authority_fact(fact.strip(";"))
+    token = builder.build(kp)
+
+    new_block = token.create_block()
+    new_block.add_code(test_case["token"][1]["code"])
+
+    token = token.append(new_block)
+
+    authorizer = get_authorizer(token, test_case["validations"][""]["world"])
+
+    with pytest.raises(biscuit_auth.AuthorizationError):
+        authorizer.authorize()
+
+def test_2_different_root_key():
+    test_case = TEST_CASES["testcases"][1]
+    _, public_root = get_test_keys()
+
+    # This example should fail to authorize
+    with open(os.path.join("samples", test_case["filename"]), "rb") as biscuit_fp:
+        with pytest.raises(biscuit_auth.BiscuitValidationError):
+            biscuit_auth.Biscuit.from_bytes(biscuit_fp.read(), public_root)
+
+def test_3_invalid_signature_format():
+    test_case = TEST_CASES["testcases"][2]
+    _, public_root = get_test_keys()
+
+    # This example should fail to authorize
+    with open(os.path.join("samples", test_case["filename"]), "rb") as biscuit_fp:
+        with pytest.raises(biscuit_auth.BiscuitValidationError):
+            biscuit_auth.Biscuit.from_bytes(biscuit_fp.read(), public_root)
+
+def test_public_keys():
+    # Happy path (hex to bytes and back)
+    public_key_from_hex = biscuit_auth.PublicKey.from_hex(TEST_CASES["root_public_key"])
     public_key_bytes = bytes(public_key_from_hex.to_bytes())
     public_key_from_bytes = biscuit_auth.PublicKey.from_bytes(public_key_bytes)
-    assert public_key_from_bytes.to_hex() == VALID_HEX_KEYPAIR["public"]
+    assert public_key_from_bytes.to_hex() == TEST_CASES["root_public_key"]
 
-def test_biscuit_builder():
-    kp = biscuit_auth.KeyPair()
-    builder = biscuit_auth.BiscuitBuilder()
-    builder.add_authority_fact('right("/a/file1.txt", "read")')
-    builder.add_authority_fact('right("/a/file1.txt", "write")')
-    builder.add_authority_fact('right("/a/file2.txt", "read")')
-    builder.add_authority_fact('right("/a/file3.txt", "write")')
-    token = builder.build(kp)
+    # Not valid hex
+    with pytest.raises(ValueError):
+        biscuit_auth.PublicKey.from_hex("notarealkey")
 
-    assert len(token.to_bytes()) == 258
+    # Valid hex, but too short
+    with pytest.raises(ValueError):
+        biscuit_auth.PublicKey.from_hex("deadbeef1234")
 
+    # Not enough bytes
+    with pytest.raises(ValueError):
+        biscuit_auth.PublicKey.from_bytes(b"1230fw9ia3")
 
-def test_authorizer():
-    kp = biscuit_auth.KeyPair()
-    builder = biscuit_auth.BiscuitBuilder()
-    builder.add_authority_fact('right("/a/file1.txt", "read")')
-    builder.add_authority_fact('right("/a/file1.txt", "write")')
-    builder.add_authority_fact('right("/a/file2.txt", "read")')
-    builder.add_authority_fact('right("/a/file3.txt", "write")')
-    token = builder.build(kp)
+def test_private_keys():
+    # Happy path (hex to bytes and back)
+    private_key_from_hex = biscuit_auth.PrivateKey.from_hex(TEST_CASES["root_private_key"])
+    private_key_bytes = bytes(private_key_from_hex.to_bytes())
+    private_key_from_bytes = biscuit_auth.PrivateKey.from_bytes(private_key_bytes)
+    assert private_key_from_bytes.to_hex() == TEST_CASES["root_private_key"]
 
-    authorizer = token.authorizer()
+    # Not valid hex
+    with pytest.raises(ValueError):
+        biscuit_auth.PrivateKey.from_hex("notarealkey")
 
-    authorizer.add_fact('resource("/a/file1.txt")')
-    authorizer.add_fact('operation("write")')
-    authorizer.add_policy('allow if right("/a/file1.txt", "read")')
-    authorizer.add_policy("deny if true")
-    authorizer.authorize()
+    # Valid hex, but too short
+    with pytest.raises(ValueError):
+        biscuit_auth.PrivateKey.from_hex("deadbeef1234")
 
-    authorizer2 = token.authorizer()
-    authorizer2.add_fact('resource("/a/file4.txt")')
-    authorizer2.add_fact('operation("write")')
-    authorizer2.add_policy('allow if right("/a/file4.txt", "write")')
-    authorizer2.add_policy("deny if true")
-    with pytest.raises(biscuit_auth.AuthorizationError):
-        authorizer2.authorize()
-
-
-
+    # Not enough bytes
+    with pytest.raises(ValueError):
+        biscuit_auth.PrivateKey.from_bytes(b"1230fw9ia3")
