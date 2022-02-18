@@ -1,5 +1,6 @@
 use biscuit_auth as biscuit;
 use hex;
+use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::*;
 
@@ -8,6 +9,7 @@ use pyo3::create_exception;
 create_exception!(biscuit_auth, DataLogError, pyo3::exceptions::PyException);
 create_exception!(biscuit_auth, AuthorizationError, pyo3::exceptions::PyException);
 create_exception!(biscuit_auth, BiscuitBuildError, pyo3::exceptions::PyException);
+create_exception!(biscuit_auth, BiscuitValidationError, pyo3::exceptions::PyException);
 
 #[pyclass]
 pub struct BiscuitBuilder {
@@ -124,10 +126,11 @@ impl Biscuit {
     ///
     /// This will check the signature using the root key
     #[classmethod]
-    pub fn from_bytes(_: &PyType, data: &[u8], root: &PublicKey) -> Biscuit {
-        Biscuit(
-            biscuit::Biscuit::from(data, |_| root.0).unwrap(),
-        )
+    pub fn from_bytes(_: &PyType, data: &[u8], root: &PublicKey) -> PyResult<Biscuit> {
+        match biscuit::Biscuit::from(data, |_| root.0) {
+            Ok(biscuit) => Ok(Biscuit(biscuit)),
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string()))
+        }
     }
 
     /// Deserializes a token from URL safe base 64 data
@@ -135,10 +138,11 @@ impl Biscuit {
     /// This will check the signature using the root key
     /// 
     #[classmethod]
-    pub fn from_base64(_: &PyType, data: &[u8], root: &PublicKey) -> Biscuit {
-        Biscuit(
-            biscuit::Biscuit::from_base64(data, |_| root.0).unwrap(),
-        )
+    pub fn from_base64(_: &PyType, data: &[u8], root: &PublicKey) -> PyResult<Biscuit> {
+        match biscuit::Biscuit::from_base64(data, |_| root.0) {
+            Ok(biscuit) => Ok(Biscuit(biscuit)),
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string()))
+        }
     }
 
     /// Serializes to raw data
@@ -285,7 +289,7 @@ impl Authorizer {
         match authorizer.authorize() {
             Ok(policy_index) => Ok(policy_index),
             // TODO Better error message
-            Err(_) => Err(AuthorizationError::new_err("Not Authorized"))
+            Err(error) => Err(AuthorizationError::new_err(error.to_string()))
         }
     }
 }
@@ -397,16 +401,23 @@ impl PrivateKey {
     /// Deserializes a private key from raw bytes
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PrivateKey> {
-        let key = biscuit::PrivateKey::from_bytes(data).unwrap();
-        return Ok(PrivateKey(key));
+        match biscuit::PrivateKey::from_bytes(data) {
+            Ok(key) => Ok(PrivateKey(key)),
+            Err(error) => Err(PyValueError::new_err(error.to_string())),
+        }
     }
 
     /// Deserializes a private key from a hexadecimal string
     #[classmethod]
     pub fn from_hex(_: &PyType, data: &str) -> PyResult<PrivateKey> {
-        let data = hex::decode(data).unwrap();
-        let key = biscuit::PrivateKey::from_bytes(&data).unwrap();
-        Ok(PrivateKey(key))
+        let data = match hex::decode(data) {
+            Ok(data) => data,
+            Err(error) => return Err(PyValueError::new_err(error.to_string())),
+        };
+        match biscuit::PrivateKey::from_bytes(&data) {
+            Ok(key) => Ok(PrivateKey(key)),
+            Err(error) => Err(PyValueError::new_err(error.to_string())),
+        }
     }
 }
 
@@ -425,6 +436,7 @@ fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("DataLogError", py.get_type::<DataLogError>())?;
     m.add("AuthorizationError", py.get_type::<AuthorizationError>())?;
     m.add("BiscuitBuildError", py.get_type::<BiscuitBuildError>())?;
+    m.add("BiscuitValidationError", py.get_type::<BiscuitValidationError>())?;
 
     Ok(())
 }
