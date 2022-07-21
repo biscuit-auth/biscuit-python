@@ -29,11 +29,8 @@ def test_1_basic():
 
     # This example should fail to authorize
     with open(os.path.join("samples", test_case["filename"]), "rb") as biscuit_fp:
-        test_biscuit = biscuit_auth.Biscuit.from_bytes(biscuit_fp.read(), public_root)
-    authorizer = get_authorizer(test_biscuit, test_case["validations"][""]["world"])
-
-    with pytest.raises(biscuit_auth.AuthorizationError):
-        authorizer.authorize()
+        with pytest.raises(biscuit_auth.BiscuitValidationError):
+            biscuit_auth.Biscuit.from_bytes(biscuit_fp.read(), public_root)
 
     # Now lets make sure we can build the same token that also fails
     kp = biscuit_auth.KeyPair.from_existing(private_root)
