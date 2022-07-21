@@ -236,8 +236,8 @@ impl PyAuthorizer {
     pub fn add_code(&mut self, source: &str) -> PyResult<()> {
         let source_result = match biscuit::parser::parse_source(source) {
             Ok(source_result) => source_result,
-            // TODO: this is a bad error message
-            Err(_) => return Err(DataLogError::new_err("Failed to load datalog code")),
+            // We're only returning the first error here (because we can only raise one exception)
+            Err(error) => return Err(DataLogError::new_err(error[0].to_string())),
         };
 
         for (_, fact) in source_result.facts.into_iter() {
