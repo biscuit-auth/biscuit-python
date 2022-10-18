@@ -10,6 +10,13 @@ create_exception!(biscuit_auth, DataLogError, pyo3::exceptions::PyException);
 create_exception!(biscuit_auth, AuthorizationError, pyo3::exceptions::PyException);
 create_exception!(biscuit_auth, BiscuitBuildError, pyo3::exceptions::PyException);
 create_exception!(biscuit_auth, BiscuitValidationError, pyo3::exceptions::PyException);
+create_exception!(biscuit_auth, BiscuitSerializationError, pyo3::exceptions::PyException);
+
+impl std::convert::From<biscuit::error::Token> for PyErr {
+    fn from(err: biscuit::error::Token) -> PyErr {
+        PyValueError::new_err(err.to_string())
+    }
+}
 
 #[pyclass(name="BiscuitBuilder")]
 pub struct PyBiscuitBuilder {
@@ -34,13 +41,22 @@ impl PyBiscuitBuilder {
         let mut builder = biscuit::Biscuit::builder(&root.0);
 
         for fact in &self.facts {
-            builder.add_authority_fact(fact.clone()).unwrap();
+            match builder.add_authority_fact(fact.clone()) {
+                Ok(_) => Ok(()),
+                Err(error) => return Err(BiscuitBuildError::new_err(error.to_string()))
+            }
         }
         for rule in &self.rules {
-            builder.add_authority_rule(rule.clone()).unwrap();
+            match builder.add_authority_rule(rule.clone()) {
+                Ok(_) => Ok(()),
+                Err(error) => return Err(BiscuitBuildError::new_err(error.to_string()))
+            }
         }
         for check in &self.checks {
-            builder.add_authority_check(check.clone()).unwrap();
+            match builder.add_authority_check(check.clone()) {
+                Ok(_) => Ok(()),
+                Err(error) => return Err(BiscuitBuildError::new_err(error.to_string()))
+            }
         }
 
         match builder.build() {
@@ -146,8 +162,11 @@ impl PyBiscuit {
     }
 
     /// Serializes to raw data
-    pub fn to_bytes(&self) -> Vec<u8> {
-        self.0.to_vec().unwrap()
+    pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
+        match self.0.to_vec() {
+            Ok(vec) => Ok(vec),
+            Err(error) => Err(BiscuitSerializationError::new_err(error.to_string()))
+        }
     }
 
     /// Serializes to URL safe base 64 data
@@ -192,8 +211,7 @@ impl PyAuthorizer {
 
     /// Adds a Datalog fact
     pub fn add_fact(&mut self, fact: &str) -> PyResult<()> {
-        let fact = fact.try_into();
-        match fact {
+        match fact.try_into() {
             Ok(fact) => Ok(self.facts.push(fact)),
             Err(error) => Err(DataLogError::new_err(error.to_string())),
         }
@@ -201,8 +219,7 @@ impl PyAuthorizer {
 
     /// Adds a Datalog rule
     pub fn add_rule(&mut self, rule: &str) -> PyResult<()> {
-        let rule = rule.try_into();
-        match rule {
+        match rule.try_into() {
             Ok(rule) => Ok(self.rules.push(rule)),
             Err(error) => Err(DataLogError::new_err(error.to_string())),
         }
@@ -212,8 +229,7 @@ impl PyAuthorizer {
     ///
     /// All checks, from authorizer and token, must be validated to authorize the request
     pub fn add_check(&mut self, check: &str) -> PyResult<()> {
-        let check = check.try_into();
-        match check {
+        match check.try_into() {
             Ok(check) => Ok(self.checks.push(check)),
             Err(error) => Err(DataLogError::new_err(error.to_string())),
         }
@@ -225,8 +241,7 @@ impl PyAuthorizer {
     /// matches. If it is a "deny" policy, the request fails, while with an "allow" policy, it will
     /// succeed
     pub fn add_policy(&mut self, policy: &str) -> PyResult<()> {
-        let policy = policy.try_into();
-        match policy {
+        match policy.try_into() {
             Ok(policy) => Ok(self.policies.push(policy)),
             Err(error) => Err(DataLogError::new_err(error.to_string())),
         }
@@ -453,6 +468,7 @@ fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add("AuthorizationError", py.get_type::<AuthorizationError>())?;
     m.add("BiscuitBuildError", py.get_type::<BiscuitBuildError>())?;
     m.add("BiscuitValidationError", py.get_type::<BiscuitValidationError>())?;
+    m.add("BiscuitSerializationError", py.get_type::<BiscuitSerializationError>())?;
 
     Ok(())
 }
