@@ -8,7 +8,7 @@ name = "biscuit_auth"
 crate-type = ["cdylib"]
 
 [dependencies]
-biscuit-auth = { version = "2.0.0" }
+biscuit-auth = { version = "3.0.0" }
 pyo3 = { version = "0.16.0", features = ["extension-module"]}
 hex = "0.4"
 base64 = "0.13.0"
