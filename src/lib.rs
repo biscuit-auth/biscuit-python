@@ -1,5 +1,9 @@
+// There seem to be false positives with pyo3
+#![allow(clippy::borrow_deref_ref)]
+use std::collections::HashMap;
+
 use biscuit_auth as biscuit;
-use hex;
+
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 use pyo3::types::*;
@@ -7,92 +11,104 @@ use pyo3::types::*;
 use pyo3::create_exception;
 
 create_exception!(biscuit_auth, DataLogError, pyo3::exceptions::PyException);
-create_exception!(biscuit_auth, AuthorizationError, pyo3::exceptions::PyException);
-create_exception!(biscuit_auth, BiscuitBuildError, pyo3::exceptions::PyException);
-create_exception!(biscuit_auth, BiscuitValidationError, pyo3::exceptions::PyException);
-create_exception!(biscuit_auth, BiscuitSerializationError, pyo3::exceptions::PyException);
+create_exception!(
+    biscuit_auth,
+    AuthorizationError,
+    pyo3::exceptions::PyException
+);
+create_exception!(
+    biscuit_auth,
+    BiscuitBuildError,
+    pyo3::exceptions::PyException
+);
+create_exception!(
+    biscuit_auth,
+    BiscuitValidationError,
+    pyo3::exceptions::PyException
+);
+create_exception!(
+    biscuit_auth,
+    BiscuitSerializationError,
+    pyo3::exceptions::PyException
+);
+create_exception!(
+    biscuit_auth,
+    BiscuitBlockError,
+    pyo3::exceptions::PyException
+);
 
-impl std::convert::From<biscuit::error::Token> for PyErr {
-    fn from(err: biscuit::error::Token) -> PyErr {
-        PyValueError::new_err(err.to_string())
-    }
-}
-
-#[pyclass(name="BiscuitBuilder")]
-pub struct PyBiscuitBuilder {
-    facts: Vec<biscuit::builder::Fact>,
-    rules: Vec<biscuit::builder::Rule>,
-    checks: Vec<biscuit::builder::Check>,
-}
+#[pyclass(name = "BiscuitBuilder")]
+pub struct PyBiscuitBuilder(biscuit::builder::BiscuitBuilder);
 
 #[pymethods]
 impl PyBiscuitBuilder {
-
     #[new]
     fn new() -> PyBiscuitBuilder {
-        PyBiscuitBuilder {
-            facts: Vec::new(),
-            rules: Vec::new(),
-            checks: Vec::new(),
-        }
+        PyBiscuitBuilder(biscuit::builder::BiscuitBuilder::new())
     }
 
-    pub fn build(&self, root: &PyKeyPair) -> PyResult<PyBiscuit> {
-        let mut builder = biscuit::Biscuit::builder(&root.0);
-
-        for fact in &self.facts {
-            match builder.add_authority_fact(fact.clone()) {
-                Ok(_) => Ok(()),
-                Err(error) => return Err(BiscuitBuildError::new_err(error.to_string()))
-            }
-        }
-        for rule in &self.rules {
-            match builder.add_authority_rule(rule.clone()) {
-                Ok(_) => Ok(()),
-                Err(error) => return Err(BiscuitBuildError::new_err(error.to_string()))
-            }
-        }
-        for check in &self.checks {
-            match builder.add_authority_check(check.clone()) {
-                Ok(_) => Ok(()),
-                Err(error) => return Err(BiscuitBuildError::new_err(error.to_string()))
-            }
-        }
-
-        match builder.build() {
-            Ok(biscuit) => Ok(PyBiscuit(biscuit)),
-            Err(error) => Err(BiscuitBuildError::new_err(error.to_string()))
-        }
+    pub fn build(&self, root: &PyPrivateKey) -> PyResult<PyBiscuit> {
+        let keypair = biscuit::KeyPair::from(&root.0);
+        Ok(PyBiscuit(
+            self.0
+                .clone()
+                .build(&keypair)
+                .map_err(|e| BiscuitBuildError::new_err(e.to_string()))?,
+        ))
     }
 
-    /// Adds a Datalog fact
-    pub fn add_authority_fact(&mut self, fact: &str) -> PyResult<()> {
-        match fact.try_into() {
-            Ok(fact) => Ok(self.facts.push(fact)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    pub fn add_code(&mut self, source: &str) -> PyResult<()> {
+        self.0
+            .add_code(source)
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    /// Adds a Datalog rule
-    pub fn add_authority_rule(&mut self, rule: &str) -> PyResult<()> {
-        match rule.try_into() {
-            Ok(rule) => Ok(self.rules.push(rule)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    // todo: support for public keys
+    pub fn add_code_with_parameters(
+        &mut self,
+        source: &str,
+        parameters: HashMap<String, PyTerm>,
+        // scope_parameters: HashMap<String, PyPublicKey>,
+    ) -> PyResult<()> {
+        let parameters = parameters
+            .into_iter()
+            .map(|(k, t)| (k, t.to_term()))
+            .collect::<HashMap<_, _>>();
+
+        /*
+        let scope_parameters = scope_parameters
+            .into_iter()
+            .map(|(k, p)| (k, p.0))
+            .collect::<HashMap<_, _>>();
+        */
+
+        self.0
+            .add_code_with_params(source, parameters, HashMap::default())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    /// Adds a check
-    ///
-    /// All checks, from authorizer and token, must be validated to authorize the request
-    pub fn add_authority_check(&mut self, check: &str) -> PyResult<()> {
-        match check.try_into() {
-            Ok(check) => Ok(self.checks.push(check)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    pub fn add_fact(&mut self, _fact: &PyFact) -> PyResult<()> {
+        todo!()
+    }
+
+    pub fn add_rule(&mut self, _rule: &PyRule) -> PyResult<()> {
+        todo!()
+    }
+
+    pub fn add_check(&mut self, _check: &PyCheck) -> PyResult<()> {
+        todo!()
+    }
+
+    pub fn merge(&mut self, _builder: &PyBlockBuilder) -> PyResult<()> {
+        todo!()
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
-#[pyclass(name="Biscuit")]
+#[pyclass(name = "Biscuit")]
 pub struct PyBiscuit(biscuit::Biscuit);
 
 #[pymethods]
@@ -105,59 +121,26 @@ impl PyBiscuit {
         PyBiscuitBuilder::new()
     }
 
-    /// Creates a BlockBuilder to prepare for attenuation
-    ///
-    /// the bulder can then be given to the token's append method to create an attenuated token
-    pub fn create_block(&self) -> PyBlockBuilder {
-        PyBlockBuilder(self.0.create_block())
-    }
-
-    /// Creates an attenuated token by adding the block generated by the BlockBuilder
-    pub fn append(&self, block: PyBlockBuilder) -> PyResult<PyBiscuit> {
-        match self.0.append(block.0) {
-            Ok(biscuit) => Ok(PyBiscuit(biscuit)),
-            Err(error) => Err(BiscuitBuildError::new_err(error.to_string()))
-        }
-    }
-
-    /// Creates an authorizer from the token
-    pub fn authorizer(&self) -> PyAuthorizer {
-        PyAuthorizer {
-            token: Some(self.0.clone()),
-            ..PyAuthorizer::default()
-        }
-    }
-
-    /// Seals the token
-    ///
-    /// A sealed token cannot be attenuated
-    pub fn seal(&self) -> PyBiscuit {
-        PyBiscuit(
-            self.0
-                .seal().unwrap(),
-        )
-    }
-
     /// Deserializes a token from raw data
     ///
     /// This will check the signature using the root key
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8], root: &PyPublicKey) -> PyResult<PyBiscuit> {
-        match biscuit::Biscuit::from(data, |_| root.0) {
+        match biscuit::Biscuit::from(data, root.0) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
-            Err(error) => Err(BiscuitValidationError::new_err(error.to_string()))
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
         }
     }
 
     /// Deserializes a token from URL safe base 64 data
     ///
     /// This will check the signature using the root key
-    /// 
+    ///
     #[classmethod]
     pub fn from_base64(_: &PyType, data: &[u8], root: &PyPublicKey) -> PyResult<PyBiscuit> {
-        match biscuit::Biscuit::from_base64(data, |_| root.0) {
+        match biscuit::Biscuit::from_base64(data, root.0) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
-            Err(error) => Err(BiscuitValidationError::new_err(error.to_string()))
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
         }
     }
 
@@ -165,7 +148,7 @@ impl PyBiscuit {
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         match self.0.to_vec() {
             Ok(vec) => Ok(vec),
-            Err(error) => Err(BiscuitSerializationError::new_err(error.to_string()))
+            Err(error) => Err(BiscuitSerializationError::new_err(error.to_string())),
         }
     }
 
@@ -182,8 +165,10 @@ impl PyBiscuit {
     }
 
     /// Prints a block's content as Datalog code
-    pub fn block_source(&self, index: usize) -> Option<String> {
-        self.0.print_block_source(index)
+    pub fn block_source(&self, index: usize) -> PyResult<String> {
+        self.0
+            .print_block_source(index)
+            .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
     }
 
     fn __repr__(&self) -> String {
@@ -192,165 +177,104 @@ impl PyBiscuit {
 }
 
 /// The Authorizer verifies a request according to its policies and the provided token
-#[pyclass(name="Authorizer")]
-#[derive(Default)]
-pub struct PyAuthorizer {
-    token: Option<biscuit::Biscuit>,
-    facts: Vec<biscuit::builder::Fact>,
-    rules: Vec<biscuit::builder::Rule>,
-    checks: Vec<biscuit::builder::Check>,
-    policies: Vec<biscuit::builder::Policy>,
-}
+#[pyclass(name = "Authorizer")]
+pub struct PyAuthorizer(biscuit::Authorizer);
 
 #[pymethods]
 impl PyAuthorizer {
     #[new]
     pub fn new() -> PyAuthorizer {
-        PyAuthorizer::default()
+        PyAuthorizer(biscuit::Authorizer::new())
     }
 
-    /// Adds a Datalog fact
-    pub fn add_fact(&mut self, fact: &str) -> PyResult<()> {
-        match fact.try_into() {
-            Ok(fact) => Ok(self.facts.push(fact)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    pub fn add_code_with_parameters(
+        &mut self,
+        source: &str,
+        _parameters: HashMap<String, PyTerm>,
+    ) -> PyResult<()> {
+        self.0
+            .add_code_with_params(source, HashMap::default(), HashMap::default())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    /// Adds a Datalog rule
-    pub fn add_rule(&mut self, rule: &str) -> PyResult<()> {
-        match rule.try_into() {
-            Ok(rule) => Ok(self.rules.push(rule)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    pub fn add_fact(&mut self, _fact: &PyFact) -> PyResult<()> {
+        todo!()
     }
 
-    /// Adds a check
-    ///
-    /// All checks, from authorizer and token, must be validated to authorize the request
-    pub fn add_check(&mut self, check: &str) -> PyResult<()> {
-        match check.try_into() {
-            Ok(check) => Ok(self.checks.push(check)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    pub fn add_rule(&mut self, _rule: &PyRule) -> PyResult<()> {
+        todo!()
     }
 
-    /// Adds a policy
-    ///
-    /// The authorizer will test all policies in order of addition and stop at the first one that
-    /// matches. If it is a "deny" policy, the request fails, while with an "allow" policy, it will
-    /// succeed
-    pub fn add_policy(&mut self, policy: &str) -> PyResult<()> {
-        match policy.try_into() {
-            Ok(policy) => Ok(self.policies.push(policy)),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
-        }
+    pub fn add_check(&mut self, _check: &PyCheck) -> PyResult<()> {
+        todo!()
     }
 
-    /// Adds facts, rules, checks and policies as one code block
-    pub fn add_code(&mut self, source: &str) -> PyResult<()> {
-        let source_result = match biscuit::parser::parse_source(source) {
-            Ok(source_result) => source_result,
-            // We're only returning the first error here (because we can only raise one exception)
-            Err(error) => return Err(DataLogError::new_err(error[0].to_string())),
-        };
+    pub fn add_policy(&mut self, _policy: &PyPolicy) -> PyResult<()> {
+        todo!()
+    }
 
-        for (_, fact) in source_result.facts.into_iter() {
-            self.facts.push(fact);
-        }
+    pub fn merge(&mut self, _builder: &PyAuthorizer) -> PyResult<()> {
+        todo!()
+    }
 
-        for (_, rule) in source_result.rules.into_iter() {
-            self.rules.push(rule);
-        }
-
-        for (_, check) in source_result.checks.into_iter() {
-            self.checks.push(check);
-        }
-
-        for (_, policy) in source_result.policies.into_iter() {
-            self.policies.push(policy);
-        }
-
-        Ok(())
+    pub fn merge_block(&mut self, _builder: &PyBlockBuilder) -> PyResult<()> {
+        todo!()
     }
 
     /// Runs the authorization checks and policies
     ///
     /// Returns the index of the matching allow policy, or an error containing the matching deny
     /// policy or a list of the failing checks
-    pub fn authorize(&self) -> PyResult<usize> {
-        let mut authorizer = match &self.token {
-            Some(token) => token
-                .authorizer().unwrap(),
-            None => biscuit::Authorizer::new().unwrap(),
-        };
+    pub fn authorize(&mut self) -> PyResult<usize> {
+        self.0
+            .authorize()
+            .map_err(|error| AuthorizationError::new_err(error.to_string()))
+    }
+}
 
-        for fact in self.facts.iter() {
-            authorizer.add_fact(fact.clone()).unwrap();
-        }
-        for rule in self.rules.iter() {
-            authorizer
-                .add_rule(rule.clone()).unwrap();
-        }
-        for check in self.checks.iter() {
-            authorizer
-                .add_check(check.clone()).unwrap();
-        }
-        for policy in self.policies.iter() {
-            authorizer
-                .add_policy(policy.clone()).unwrap();
-        }
-
-        match authorizer.authorize() {
-            Ok(policy_index) => Ok(policy_index),
-            Err(error) => Err(AuthorizationError::new_err(error.to_string()))
-        }
+impl Default for PyAuthorizer {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
 /// Creates a block to attenuate a token
-#[pyclass(name="BlockBuilder")]
+#[pyclass(name = "BlockBuilder")]
 #[derive(Clone)]
 pub struct PyBlockBuilder(biscuit::builder::BlockBuilder);
 
 #[pymethods]
 impl PyBlockBuilder {
-    /// Adds a Datalog fact
-    pub fn add_fact(&mut self, fact: &str) -> PyResult<()> {
-        match self.0.add_fact(fact) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(DataLogError::new_err(error.to_string()))
-        }
+    pub fn add_fact(&mut self, _fact: &PyFact) -> PyResult<()> {
+        todo!()
     }
 
-    /// Adds a Datalog rule
-    pub fn add_rule(&mut self, rule: &str) ->  PyResult<()> {
-        match self.0.add_rule(rule) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(DataLogError::new_err(error.to_string()))
-        }
+    pub fn add_rule(&mut self, _rule: &PyRule) -> PyResult<()> {
+        todo!()
     }
 
-    /// Adds a check
-    ///
-    /// All checks, from authorizer and token, must be validated to authorize the request
-    pub fn add_check(&mut self, check: &str) -> PyResult<()> {
-        match self.0.add_check(check) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(DataLogError::new_err(error.to_string()))
-        }
+    pub fn add_check(&mut self, _check: &PyCheck) -> PyResult<()> {
+        todo!()
+    }
+
+    pub fn add_policy(&mut self, _policy: &PyPolicy) -> PyResult<()> {
+        todo!()
+    }
+
+    pub fn merge(&mut self, _builder: &PyAuthorizer) -> PyResult<()> {
+        todo!()
     }
 
     /// Adds facts, rules, checks and policies as one code block
     pub fn add_code(&mut self, source: &str) -> PyResult<()> {
         match self.0.add_code(source) {
             Ok(_) => Ok(()),
-            Err(error) => Err(DataLogError::new_err(error.to_string()))
+            Err(error) => Err(DataLogError::new_err(error.to_string())),
         }
     }
 }
 
-#[pyclass(name="KeyPair")]
+#[pyclass(name = "KeyPair")]
 pub struct PyKeyPair(biscuit::KeyPair);
 
 #[pymethods]
@@ -361,8 +285,8 @@ impl PyKeyPair {
     }
 
     #[classmethod]
-    pub fn from_existing(_: &PyType, private_key: PyPrivateKey) -> Self {
-        PyKeyPair(biscuit::KeyPair::from(private_key.0))
+    pub fn from_private_key(_: &PyType, private_key: PyPrivateKey) -> Self {
+        PyKeyPair(biscuit::KeyPair::from(&private_key.0))
     }
 
     #[getter]
@@ -376,8 +300,14 @@ impl PyKeyPair {
     }
 }
 
+impl Default for PyKeyPair {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Public key
-#[pyclass(name="PublicKey")]
+#[pyclass(name = "PublicKey")]
 pub struct PyPublicKey(biscuit::PublicKey);
 
 #[pymethods]
@@ -389,7 +319,7 @@ impl PyPublicKey {
 
     /// Serializes a public key to a hexadecimal string
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.0.to_bytes())
+        hex::encode(self.0.to_bytes())
     }
 
     /// Deserializes a public key from raw bytes
@@ -415,7 +345,7 @@ impl PyPublicKey {
     }
 }
 
-#[pyclass(name="PrivateKey")]
+#[pyclass(name = "PrivateKey")]
 #[derive(Clone)]
 pub struct PyPrivateKey(biscuit::PrivateKey);
 
@@ -428,7 +358,7 @@ impl PyPrivateKey {
 
     /// Serializes a private key to a hexadecimal string
     pub fn to_hex(&self) -> String {
-        hex::encode(&self.0.to_bytes())
+        hex::encode(self.0.to_bytes())
     }
 
     /// Deserializes a private key from raw bytes
@@ -454,6 +384,71 @@ impl PyPrivateKey {
     }
 }
 
+/// Term values passed from python-land.
+#[derive(FromPyObject)]
+pub enum PyTerm {
+    Integer(i64),
+    Str(String),
+    // Date(&'a PyDateTime),
+    Bytes(Vec<u8>),
+    Bool(bool),
+    // Set(BTreeSet<Box<PyTerm>>),
+}
+
+impl PyTerm {
+    pub fn to_term(&self) -> biscuit::builder::Term {
+        match self {
+            PyTerm::Integer(i) => (*i).into(),
+            PyTerm::Str(s) => biscuit::builder::Term::Str(s.to_string()),
+            PyTerm::Bytes(b) => b.clone().into(),
+            PyTerm::Bool(b) => (*b).into(),
+        }
+    }
+}
+
+#[pyclass(name = "Fact")]
+pub struct PyFact(biscuit_auth::builder::Fact);
+
+#[pymethods]
+impl PyFact {
+    #[new]
+    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
+        todo!()
+    }
+}
+
+#[pyclass(name = "Rule")]
+pub struct PyRule(biscuit_auth::builder::Rule);
+
+#[pymethods]
+impl PyRule {
+    #[new]
+    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
+        todo!()
+    }
+}
+
+#[pyclass(name = "Check")]
+pub struct PyCheck(biscuit_auth::builder::Check);
+
+#[pymethods]
+impl PyCheck {
+    #[new]
+    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
+        todo!()
+    }
+}
+
+#[pyclass(name = "Policy")]
+pub struct PyPolicy(biscuit_auth::builder::Policy);
+
+#[pymethods]
+impl PyPolicy {
+    #[new]
+    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
+        todo!()
+    }
+}
 
 #[pymodule]
 fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
@@ -463,12 +458,24 @@ fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyBiscuit>()?;
     m.add_class::<PyBiscuitBuilder>()?;
     m.add_class::<PyBlockBuilder>()?;
+    m.add_class::<PyAuthorizer>()?;
+    m.add_class::<PyFact>()?;
+    m.add_class::<PyRule>()?;
+    m.add_class::<PyCheck>()?;
+    m.add_class::<PyPolicy>()?;
 
     m.add("DataLogError", py.get_type::<DataLogError>())?;
     m.add("AuthorizationError", py.get_type::<AuthorizationError>())?;
     m.add("BiscuitBuildError", py.get_type::<BiscuitBuildError>())?;
-    m.add("BiscuitValidationError", py.get_type::<BiscuitValidationError>())?;
-    m.add("BiscuitSerializationError", py.get_type::<BiscuitSerializationError>())?;
+    m.add("BiscuitBlockError", py.get_type::<BiscuitBlockError>())?;
+    m.add(
+        "BiscuitValidationError",
+        py.get_type::<BiscuitValidationError>(),
+    )?;
+    m.add(
+        "BiscuitSerializationError",
+        py.get_type::<BiscuitSerializationError>(),
+    )?;
 
     Ok(())
 }
