@@ -1,8 +1,10 @@
 // There seem to be false positives with pyo3
 #![allow(clippy::borrow_deref_ref)]
+use chrono::DateTime;
+use chrono::Utc;
 use std::collections::HashMap;
 
-use biscuit_auth as biscuit;
+use ::biscuit_auth::{builder, error, Authorizer, Biscuit, KeyPair, PrivateKey, PublicKey};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -38,17 +40,24 @@ create_exception!(
 );
 
 #[pyclass(name = "BiscuitBuilder")]
-pub struct PyBiscuitBuilder(biscuit::builder::BiscuitBuilder);
+pub struct PyBiscuitBuilder(builder::BiscuitBuilder);
 
 #[pymethods]
 impl PyBiscuitBuilder {
     #[new]
-    fn new() -> PyBiscuitBuilder {
-        PyBiscuitBuilder(biscuit::builder::BiscuitBuilder::new())
+    fn new(
+        source: Option<String>,
+        parameters: Option<HashMap<String, PyTerm>>,
+    ) -> PyResult<PyBiscuitBuilder> {
+        let mut builder = PyBiscuitBuilder(builder::BiscuitBuilder::new());
+        if let Some(source) = source {
+            builder.add_code_with_parameters(&source, parameters.unwrap_or_default())?;
+        }
+        Ok(builder)
     }
 
     pub fn build(&self, root: &PyPrivateKey) -> PyResult<PyBiscuit> {
-        let keypair = biscuit::KeyPair::from(&root.0);
+        let keypair = KeyPair::from(&root.0);
         Ok(PyBiscuit(
             self.0
                 .clone()
@@ -67,40 +76,40 @@ impl PyBiscuitBuilder {
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
-        parameters: HashMap<String, PyTerm>,
+        raw_parameters: HashMap<String, PyTerm>,
         // scope_parameters: HashMap<String, PyPublicKey>,
     ) -> PyResult<()> {
-        let parameters = parameters
-            .into_iter()
-            .map(|(k, t)| (k, t.to_term()))
-            .collect::<HashMap<_, _>>();
+        let mut parameters = HashMap::new();
 
-        /*
-        let scope_parameters = scope_parameters
-            .into_iter()
-            .map(|(k, p)| (k, p.0))
-            .collect::<HashMap<_, _>>();
-        */
+        for (k, raw_value) in raw_parameters {
+            parameters.insert(k, raw_value.to_term()?);
+        }
 
         self.0
             .add_code_with_params(source, parameters, HashMap::default())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_fact(&mut self, _fact: &PyFact) -> PyResult<()> {
-        todo!()
+    pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
+        self.0
+            .add_fact(fact.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_rule(&mut self, _rule: &PyRule) -> PyResult<()> {
-        todo!()
+    pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
+        self.0
+            .add_rule(rule.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_check(&mut self, _check: &PyCheck) -> PyResult<()> {
-        todo!()
+    pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
+        self.0
+            .add_check(check.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn merge(&mut self, _builder: &PyBlockBuilder) -> PyResult<()> {
-        todo!()
+    pub fn merge(&mut self, builder: &PyBlockBuilder) {
+        self.0.merge(builder.0.clone())
     }
 
     fn __repr__(&self) -> String {
@@ -109,7 +118,7 @@ impl PyBiscuitBuilder {
 }
 
 #[pyclass(name = "Biscuit")]
-pub struct PyBiscuit(biscuit::Biscuit);
+pub struct PyBiscuit(Biscuit);
 
 #[pymethods]
 impl PyBiscuit {
@@ -117,8 +126,8 @@ impl PyBiscuit {
     ///
     /// the builder can then create a new token with a root key
     #[staticmethod]
-    pub fn builder() -> PyBiscuitBuilder {
-        PyBiscuitBuilder::new()
+    pub fn builder() -> PyResult<PyBiscuitBuilder> {
+        PyBiscuitBuilder::new(None, None)
     }
 
     /// Deserializes a token from raw data
@@ -126,7 +135,7 @@ impl PyBiscuit {
     /// This will check the signature using the root key
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8], root: &PyPublicKey) -> PyResult<PyBiscuit> {
-        match biscuit::Biscuit::from(data, root.0) {
+        match Biscuit::from(data, root.0) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
         }
@@ -137,8 +146,8 @@ impl PyBiscuit {
     /// This will check the signature using the root key
     ///
     #[classmethod]
-    pub fn from_base64(_: &PyType, data: &[u8], root: &PyPublicKey) -> PyResult<PyBiscuit> {
-        match biscuit::Biscuit::from_base64(data, root.0) {
+    pub fn from_base64(_: &PyType, data: &str, root: &PyPublicKey) -> PyResult<PyBiscuit> {
+        match Biscuit::from_base64(data, root.0) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
         }
@@ -171,6 +180,13 @@ impl PyBiscuit {
             .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
     }
 
+    pub fn append(&self, block: &PyBlockBuilder) -> PyResult<PyBiscuit> {
+        self.0
+            .append(block.0.clone())
+            .map_err(|e| BiscuitBuildError::new_err(e.to_string()))
+            .map(PyBiscuit)
+    }
+
     fn __repr__(&self) -> String {
         self.0.print()
     }
@@ -178,47 +194,74 @@ impl PyBiscuit {
 
 /// The Authorizer verifies a request according to its policies and the provided token
 #[pyclass(name = "Authorizer")]
-pub struct PyAuthorizer(biscuit::Authorizer);
+pub struct PyAuthorizer(Authorizer);
 
 #[pymethods]
 impl PyAuthorizer {
     #[new]
-    pub fn new() -> PyAuthorizer {
-        PyAuthorizer(biscuit::Authorizer::new())
+    pub fn new(
+        source: Option<String>,
+        parameters: Option<HashMap<String, PyTerm>>,
+    ) -> PyResult<PyAuthorizer> {
+        let mut builder = PyAuthorizer(Authorizer::new());
+        if let Some(source) = source {
+            builder.add_code_with_parameters(&source, parameters.unwrap_or_default())?;
+        }
+        Ok(builder)
     }
 
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
-        _parameters: HashMap<String, PyTerm>,
+        raw_parameters: HashMap<String, PyTerm>,
     ) -> PyResult<()> {
+        let mut parameters = HashMap::new();
+
+        for (k, raw_value) in raw_parameters {
+            parameters.insert(k, raw_value.to_term()?);
+        }
+
         self.0
-            .add_code_with_params(source, HashMap::default(), HashMap::default())
+            .add_code_with_params(source, parameters, HashMap::default())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_fact(&mut self, _fact: &PyFact) -> PyResult<()> {
-        todo!()
+    pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
+        self.0
+            .add_fact(fact.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_rule(&mut self, _rule: &PyRule) -> PyResult<()> {
-        todo!()
+    pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
+        self.0
+            .add_rule(rule.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_check(&mut self, _check: &PyCheck) -> PyResult<()> {
-        todo!()
+    pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
+        self.0
+            .add_check(check.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn add_policy(&mut self, _policy: &PyPolicy) -> PyResult<()> {
-        todo!()
+    pub fn add_policy(&mut self, policy: &PyPolicy) -> PyResult<()> {
+        self.0
+            .add_policy(policy.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    pub fn merge(&mut self, _builder: &PyAuthorizer) -> PyResult<()> {
-        todo!()
+    pub fn merge(&mut self, builder: &PyAuthorizer) {
+        self.0.merge(builder.0.clone())
     }
 
-    pub fn merge_block(&mut self, _builder: &PyBlockBuilder) -> PyResult<()> {
-        todo!()
+    pub fn merge_block(&mut self, builder: &PyBlockBuilder) {
+        self.0.merge_block(builder.0.clone())
+    }
+
+    pub fn add_token(&mut self, token: &PyBiscuit) -> PyResult<()> {
+        self.0
+            .add_token(&token.0)
+            .map_err(|e| BiscuitValidationError::new_err(e.to_string()))
     }
 
     /// Runs the authorization checks and policies
@@ -230,63 +273,100 @@ impl PyAuthorizer {
             .authorize()
             .map_err(|error| AuthorizationError::new_err(error.to_string()))
     }
-}
 
-impl Default for PyAuthorizer {
-    fn default() -> Self {
-        Self::new()
+    pub fn query(&mut self, rule: &PyRule) -> PyResult<Vec<PyFact>> {
+        let results = self
+            .0
+            .query(rule.0.clone())
+            .map_err(|error| AuthorizationError::new_err(error.to_string()))?;
+
+        Ok(results
+            .iter()
+            .map(|f: &builder::Fact| PyFact(f.clone()))
+            .collect())
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
 /// Creates a block to attenuate a token
 #[pyclass(name = "BlockBuilder")]
 #[derive(Clone)]
-pub struct PyBlockBuilder(biscuit::builder::BlockBuilder);
+pub struct PyBlockBuilder(builder::BlockBuilder);
 
 #[pymethods]
 impl PyBlockBuilder {
-    pub fn add_fact(&mut self, _fact: &PyFact) -> PyResult<()> {
-        todo!()
-    }
-
-    pub fn add_rule(&mut self, _rule: &PyRule) -> PyResult<()> {
-        todo!()
-    }
-
-    pub fn add_check(&mut self, _check: &PyCheck) -> PyResult<()> {
-        todo!()
-    }
-
-    pub fn add_policy(&mut self, _policy: &PyPolicy) -> PyResult<()> {
-        todo!()
-    }
-
-    pub fn merge(&mut self, _builder: &PyAuthorizer) -> PyResult<()> {
-        todo!()
-    }
-
-    /// Adds facts, rules, checks and policies as one code block
-    pub fn add_code(&mut self, source: &str) -> PyResult<()> {
-        match self.0.add_code(source) {
-            Ok(_) => Ok(()),
-            Err(error) => Err(DataLogError::new_err(error.to_string())),
+    #[new]
+    fn new(
+        source: Option<String>,
+        parameters: Option<HashMap<String, PyTerm>>,
+    ) -> PyResult<PyBlockBuilder> {
+        let mut builder = PyBlockBuilder(builder::BlockBuilder::new());
+        if let Some(source) = source {
+            builder.add_code_with_parameters(&source, parameters.unwrap_or_default())?;
         }
+        Ok(builder)
+    }
+
+    pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
+        self.0
+            .add_fact(fact.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
+    }
+
+    pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
+        self.0
+            .add_rule(rule.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
+    }
+
+    pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
+        self.0
+            .add_check(check.0.clone())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
+    }
+
+    pub fn merge(&mut self, builder: &PyBlockBuilder) {
+        self.0.merge(builder.0.clone())
+    }
+
+    pub fn add_code_with_parameters(
+        &mut self,
+        source: &str,
+        raw_parameters: HashMap<String, PyTerm>,
+        // scope_parameters: HashMap<String, PyPublicKey>,
+    ) -> PyResult<()> {
+        let mut parameters = HashMap::new();
+
+        for (k, raw_value) in raw_parameters {
+            parameters.insert(k, raw_value.to_term()?);
+        }
+
+        self.0
+            .add_code_with_params(source, parameters, HashMap::default())
+            .map_err(|e| DataLogError::new_err(e.to_string()))
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
 #[pyclass(name = "KeyPair")]
-pub struct PyKeyPair(biscuit::KeyPair);
+pub struct PyKeyPair(KeyPair);
 
 #[pymethods]
 impl PyKeyPair {
     #[new]
     pub fn new() -> Self {
-        PyKeyPair(biscuit::KeyPair::new())
+        PyKeyPair(KeyPair::new())
     }
 
     #[classmethod]
     pub fn from_private_key(_: &PyType, private_key: PyPrivateKey) -> Self {
-        PyKeyPair(biscuit::KeyPair::from(&private_key.0))
+        PyKeyPair(KeyPair::from(&private_key.0))
     }
 
     #[getter]
@@ -308,7 +388,7 @@ impl Default for PyKeyPair {
 
 /// Public key
 #[pyclass(name = "PublicKey")]
-pub struct PyPublicKey(biscuit::PublicKey);
+pub struct PyPublicKey(PublicKey);
 
 #[pymethods]
 impl PyPublicKey {
@@ -325,7 +405,7 @@ impl PyPublicKey {
     /// Deserializes a public key from raw bytes
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PyPublicKey> {
-        match biscuit::PublicKey::from_bytes(data) {
+        match PublicKey::from_bytes(data) {
             Ok(key) => Ok(PyPublicKey(key)),
             Err(error) => Err(PyValueError::new_err(error.to_string())),
         }
@@ -338,7 +418,7 @@ impl PyPublicKey {
             Ok(data) => data,
             Err(error) => return Err(PyValueError::new_err(error.to_string())),
         };
-        match biscuit::PublicKey::from_bytes(&data) {
+        match PublicKey::from_bytes(&data) {
             Ok(key) => Ok(PyPublicKey(key)),
             Err(error) => Err(PyValueError::new_err(error.to_string())),
         }
@@ -347,7 +427,7 @@ impl PyPublicKey {
 
 #[pyclass(name = "PrivateKey")]
 #[derive(Clone)]
-pub struct PyPrivateKey(biscuit::PrivateKey);
+pub struct PyPrivateKey(PrivateKey);
 
 #[pymethods]
 impl PyPrivateKey {
@@ -364,7 +444,7 @@ impl PyPrivateKey {
     /// Deserializes a private key from raw bytes
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PyPrivateKey> {
-        match biscuit::PrivateKey::from_bytes(data) {
+        match PrivateKey::from_bytes(data) {
             Ok(key) => Ok(PyPrivateKey(key)),
             Err(error) => Err(PyValueError::new_err(error.to_string())),
         }
@@ -377,7 +457,7 @@ impl PyPrivateKey {
             Ok(data) => data,
             Err(error) => return Err(PyValueError::new_err(error.to_string())),
         };
-        match biscuit::PrivateKey::from_bytes(&data) {
+        match PrivateKey::from_bytes(&data) {
             Ok(key) => Ok(PyPrivateKey(key)),
             Err(error) => Err(PyValueError::new_err(error.to_string())),
         }
@@ -387,66 +467,147 @@ impl PyPrivateKey {
 /// Term values passed from python-land.
 #[derive(FromPyObject)]
 pub enum PyTerm {
+    Bool(bool),
     Integer(i64),
     Str(String),
-    // Date(&'a PyDateTime),
+    Date(Py<PyDateTime>),
     Bytes(Vec<u8>),
-    Bool(bool),
     // Set(BTreeSet<Box<PyTerm>>),
 }
 
 impl PyTerm {
-    pub fn to_term(&self) -> biscuit::builder::Term {
+    pub fn to_term(&self) -> PyResult<builder::Term> {
         match self {
-            PyTerm::Integer(i) => (*i).into(),
-            PyTerm::Str(s) => biscuit::builder::Term::Str(s.to_string()),
-            PyTerm::Bytes(b) => b.clone().into(),
-            PyTerm::Bool(b) => (*b).into(),
+            PyTerm::Integer(i) => Ok((*i).into()),
+            PyTerm::Str(s) => Ok(builder::Term::Str(s.to_string())),
+            PyTerm::Bytes(b) => Ok(b.clone().into()),
+            PyTerm::Bool(b) => Ok((*b).into()),
+            PyTerm::Date(d) => Python::with_gil(|py| {
+                let ts = d.extract::<DateTime<Utc>>(py)?.timestamp();
+                if ts < 0 {
+                    return Err(PyValueError::new_err(
+                        "Only positive timestamps are available".to_string(),
+                    ));
+                }
+                Ok(builder::Term::Date(ts as u64))
+            }), // todo
+                /*
+                    PyTerm::Date(d) => Python::with_gil(|py| {
+                        let d = d.as_ref(py);
+                        let year = d.get_year();
+                        let month = d.get_month();
+                        let day = d.get_day();
+                        let hour = d.get_hour();
+                        let min = d.get_minute();
+                        let sec = d.get_second();
+
+                        let naive_date = NaiveDate::from_ymd_opt(year, month as u32, day as u32).unwrap(); // todo handle errors (invalid combos)
+                        let naive_time =
+                            NaiveTime::from_hms_opt(hour as u32, min as u32, sec as u32).unwrap(); // todo handle errors (invalid combos)
+                        let datetime = NaiveDateTime::new(naive_date, naive_time);
+                        let datetime: DateTime<Utc> = DateTime::from_utc(datetime, Utc); // todo handle offset
+                        builder::Term::Date(datetime.timestamp() as u64) // todo handle errors (negative timestamps)
+                    }),
+                */
         }
     }
 }
 
 #[pyclass(name = "Fact")]
-pub struct PyFact(biscuit_auth::builder::Fact);
+pub struct PyFact(builder::Fact);
 
 #[pymethods]
 impl PyFact {
     #[new]
-    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
-        todo!()
+    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+        let mut fact: builder::Fact = source
+            .try_into()
+            .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                fact.set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+        Ok(PyFact(fact))
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
 #[pyclass(name = "Rule")]
-pub struct PyRule(biscuit_auth::builder::Rule);
+pub struct PyRule(builder::Rule);
 
 #[pymethods]
 impl PyRule {
     #[new]
-    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
-        todo!()
+    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+        let mut rule: builder::Rule = source
+            .try_into()
+            .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                rule.set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+        Ok(PyRule(rule))
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
 #[pyclass(name = "Check")]
-pub struct PyCheck(biscuit_auth::builder::Check);
+pub struct PyCheck(builder::Check);
 
 #[pymethods]
 impl PyCheck {
     #[new]
-    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
-        todo!()
+    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+        let mut check: builder::Check = source
+            .try_into()
+            .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                check
+                    .set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+        Ok(PyCheck(check))
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
 #[pyclass(name = "Policy")]
-pub struct PyPolicy(biscuit_auth::builder::Policy);
+pub struct PyPolicy(builder::Policy);
 
 #[pymethods]
 impl PyPolicy {
     #[new]
-    pub fn new(_source: &str, _parameters: HashMap<String, PyTerm>) -> PyResult<Self> {
-        todo!()
+    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+        let mut policy: builder::Policy = source
+            .try_into()
+            .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                policy
+                    .set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+        Ok(PyPolicy(policy))
+    }
+
+    fn __repr__(&self) -> String {
+        self.0.to_string()
     }
 }
 
