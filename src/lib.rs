@@ -48,10 +48,15 @@ impl PyBiscuitBuilder {
     fn new(
         source: Option<String>,
         parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
     ) -> PyResult<PyBiscuitBuilder> {
         let mut builder = PyBiscuitBuilder(builder::BiscuitBuilder::new());
         if let Some(source) = source {
-            builder.add_code_with_parameters(&source, parameters.unwrap_or_default())?;
+            builder.add_code_with_parameters(
+                &source,
+                parameters.unwrap_or_default(),
+                scope_parameters.unwrap_or_default(),
+            )?;
         }
         Ok(builder)
     }
@@ -77,7 +82,7 @@ impl PyBiscuitBuilder {
         &mut self,
         source: &str,
         raw_parameters: HashMap<String, PyTerm>,
-        // scope_parameters: HashMap<String, PyPublicKey>,
+        scope_parameters: HashMap<String, PyPublicKey>,
     ) -> PyResult<()> {
         let mut parameters = HashMap::new();
 
@@ -85,8 +90,13 @@ impl PyBiscuitBuilder {
             parameters.insert(k, raw_value.to_term()?);
         }
 
+        let scope_parameters = scope_parameters
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.0))
+            .collect();
+
         self.0
-            .add_code_with_params(source, parameters, HashMap::default())
+            .add_code_with_params(source, parameters, scope_parameters)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
@@ -127,7 +137,7 @@ impl PyBiscuit {
     /// the builder can then create a new token with a root key
     #[staticmethod]
     pub fn builder() -> PyResult<PyBiscuitBuilder> {
-        PyBiscuitBuilder::new(None, None)
+        PyBiscuitBuilder::new(None, None, None)
     }
 
     /// Deserializes a token from raw data
@@ -202,10 +212,15 @@ impl PyAuthorizer {
     pub fn new(
         source: Option<String>,
         parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
     ) -> PyResult<PyAuthorizer> {
         let mut builder = PyAuthorizer(Authorizer::new());
         if let Some(source) = source {
-            builder.add_code_with_parameters(&source, parameters.unwrap_or_default())?;
+            builder.add_code_with_parameters(
+                &source,
+                parameters.unwrap_or_default(),
+                scope_parameters.unwrap_or_default(),
+            )?;
         }
         Ok(builder)
     }
@@ -214,6 +229,7 @@ impl PyAuthorizer {
         &mut self,
         source: &str,
         raw_parameters: HashMap<String, PyTerm>,
+        scope_parameters: HashMap<String, PyPublicKey>,
     ) -> PyResult<()> {
         let mut parameters = HashMap::new();
 
@@ -221,8 +237,13 @@ impl PyAuthorizer {
             parameters.insert(k, raw_value.to_term()?);
         }
 
+        let scope_parameters = scope_parameters
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.0))
+            .collect();
+
         self.0
-            .add_code_with_params(source, parameters, HashMap::default())
+            .add_code_with_params(source, parameters, scope_parameters)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
@@ -302,10 +323,15 @@ impl PyBlockBuilder {
     fn new(
         source: Option<String>,
         parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
     ) -> PyResult<PyBlockBuilder> {
         let mut builder = PyBlockBuilder(builder::BlockBuilder::new());
         if let Some(source) = source {
-            builder.add_code_with_parameters(&source, parameters.unwrap_or_default())?;
+            builder.add_code_with_parameters(
+                &source,
+                parameters.unwrap_or_default(),
+                scope_parameters.unwrap_or_default(),
+            )?;
         }
         Ok(builder)
     }
@@ -336,7 +362,7 @@ impl PyBlockBuilder {
         &mut self,
         source: &str,
         raw_parameters: HashMap<String, PyTerm>,
-        // scope_parameters: HashMap<String, PyPublicKey>,
+        scope_parameters: HashMap<String, PyPublicKey>,
     ) -> PyResult<()> {
         let mut parameters = HashMap::new();
 
@@ -344,8 +370,13 @@ impl PyBlockBuilder {
             parameters.insert(k, raw_value.to_term()?);
         }
 
+        let scope_parameters = scope_parameters
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.0))
+            .collect();
+
         self.0
-            .add_code_with_params(source, parameters, HashMap::default())
+            .add_code_with_params(source, parameters, scope_parameters)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
@@ -387,6 +418,7 @@ impl Default for PyKeyPair {
 }
 
 /// Public key
+#[derive(Clone)]
 #[pyclass(name = "PublicKey")]
 pub struct PyPublicKey(PublicKey);
 
@@ -543,13 +575,24 @@ pub struct PyRule(builder::Rule);
 #[pymethods]
 impl PyRule {
     #[new]
-    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+    pub fn new(
+        source: &str,
+        parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
+    ) -> PyResult<Self> {
         let mut rule: builder::Rule = source
             .try_into()
             .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
         if let Some(parameters) = parameters {
             for (k, v) in parameters {
                 rule.set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+
+        if let Some(scope_parameters) = scope_parameters {
+            for (k, v) in scope_parameters {
+                rule.set_scope(&k, v.0)
                     .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
             }
         }

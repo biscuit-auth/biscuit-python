@@ -9,7 +9,6 @@ from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Chec
 def test_biscuit_builder():
     kp = KeyPair()
 
-    # todo dates, public keys in trusting annotations
     builder = BiscuitBuilder(
       """
         string({str});
@@ -17,18 +16,25 @@ def test_biscuit_builder():
         bool({bool});
         bytes({bytes});
         datetime({datetime});
+        check if true trusting {pubkey};
       """,
       { 'str': "1234",
         'int': 1,
         'bool': True,
         'bytes': [0xaa, 0xbb],
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
-      }
+      },
+      { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
     )
 
     builder.add_fact(Fact("fact(false)"));
     builder.add_fact(Fact("fact({f})", { 'f': True }));
     builder.add_rule(Rule("head($var) <- fact($var, {f})", { 'f': True }));
+    builder.add_rule(Rule(
+        "head($var) <- fact($var, {f}) trusting {pubkey}",
+        { 'f': True },
+        { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+    ));
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
     builder.merge(BlockBuilder('builder(true);'))
 
@@ -42,6 +48,8 @@ fact(false);
 fact(true);
 builder(true);
 head($var) <- fact($var, true);
+head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
+check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
 """
 
@@ -56,18 +64,25 @@ def test_block_builder():
         bool({bool});
         bytes({bytes});
         datetime({datetime});
+        check if true trusting {pubkey};
       """,
       { 'str': "1234",
         'int': 1,
         'bool': True,
         'bytes': [0xaa, 0xbb],
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
-      }
+      },
+      { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
     )
 
     builder.add_fact(Fact("fact(false)"));
     builder.add_fact(Fact("fact({f})", { 'f': True }));
     builder.add_rule(Rule("head($var) <- fact($var, {f})", { 'f': True }));
+    builder.add_rule(Rule(
+        "head($var) <- fact($var, {f}) trusting {pubkey}",
+        { 'f': True },
+        { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+    ));
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
     builder.merge(BlockBuilder('builder(true);'))
 
@@ -80,6 +95,8 @@ fact(false);
 fact(true);
 builder(true);
 head($var) <- fact($var, true);
+head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
+check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
 """
 
@@ -91,6 +108,7 @@ def test_authorizer_builder():
         bool({bool});
         bytes({bytes});
         datetime({datetime});
+        check if true trusting {pubkey};
         allow if true;
       """,
       { 'str': "1234",
@@ -98,12 +116,18 @@ def test_authorizer_builder():
         'bool': True,
         'bytes': [0xaa, 0xbb],
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
-      }
+      },
+      { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
     )
 
     builder.add_fact(Fact("fact(false)"));
     builder.add_fact(Fact("fact({f})", { 'f': True }));
     builder.add_rule(Rule("head($var) <- fact($var, {f})", { 'f': True }));
+    builder.add_rule(Rule(
+        "head($var) <- fact($var, {f}) trusting {pubkey}",
+        { 'f': True },
+        { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+    ));
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
     builder.merge_block(BlockBuilder('builder(true);'))
     builder.merge(Authorizer('builder(false);'))
@@ -128,9 +152,11 @@ string("1234");
 // Rules:
 // origin: authorizer
 head($var) <- fact($var, true);
+head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 
 // Checks:
 // origin: authorizer
+check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
 
 // Policies:
