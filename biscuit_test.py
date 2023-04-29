@@ -6,6 +6,11 @@ import pytest
 
 from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Check, Fact, KeyPair, Policy, PrivateKey, PublicKey, Rule
 
+def test_fact():
+    fact = Fact('fact(1, true, "Test", hex:aabbcc, 2023-04-29T01:00:00Z)')
+    assert fact.name == "fact"
+    assert fact.terms == [1, True, "Test", [0xaa, 0xbb, 0xcc], datetime(2023, 4, 29, 1, 0, 0, tzinfo = timezone.utc)]
+
 def test_biscuit_builder():
     kp = KeyPair()
 
@@ -188,7 +193,9 @@ def test_complete_lifecycle():
     rule = Rule("u($id) <- user($id), $id == {id}", { 'id': "1234"})
     facts = authorizer.query(rule)
 
-    assert repr(facts) == repr([Fact('u("1234")')])
+    assert len(facts) == 1
+    assert facts[0].name == "u"
+    assert facts[0].terms == ["1234"]
 
 def test_public_keys():
     # Happy path (hex to bytes and back)

@@ -1,6 +1,7 @@
 // There seem to be false positives with pyo3
 #![allow(clippy::borrow_deref_ref)]
 use chrono::DateTime;
+use chrono::TimeZone;
 use chrono::Utc;
 use std::collections::HashMap;
 
@@ -562,6 +563,35 @@ impl PyFact {
             }
         }
         Ok(PyFact(fact))
+    }
+
+    #[getter]
+    pub fn name(&self) -> String {
+        self.0.predicate.name.clone()
+    }
+
+    #[getter]
+    pub fn terms(&self) -> PyResult<Vec<PyObject>> {
+        self.0
+            .predicate
+            .terms
+            .iter()
+            .map(|t| {
+                Python::with_gil(|py| match t {
+                    builder::Term::Integer(i) => Ok((*i).into_py(py)),
+                    builder::Term::Str(s) => Ok(s.into_py(py)),
+                    builder::Term::Date(d) => {
+                        Ok(Utc.timestamp_opt(*d as i64, 0).unwrap().into_py(py))
+                    }
+                    builder::Term::Bytes(bs) => Ok(bs.clone().into_py(py)),
+                    builder::Term::Bool(b) => Ok(b.into_py(py)),
+                    //Set(BTreeSet<Term>),
+                    //Variable(String),
+                    //Parameter(String),
+                    _ => Err(DataLogError::new_err("Invalid term value".to_string())),
+                })
+            })
+            .collect()
     }
 
     fn __repr__(&self) -> String {
