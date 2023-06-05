@@ -34,3 +34,9 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
+    - name: Test documentation
+      run: |
+        pip install sphinx
+        cd docs
+        make doctest
+        make html
