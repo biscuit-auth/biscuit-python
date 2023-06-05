@@ -21,6 +21,7 @@ def test_biscuit_builder():
         bool({bool});
         bytes({bytes});
         datetime({datetime});
+        set({set});
         check if true trusting {pubkey};
       """,
       { 'str': "1234",
@@ -28,6 +29,7 @@ def test_biscuit_builder():
         'bool': True,
         'bytes': [0xaa, 0xbb],
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
+        'set': {2, True, "Test", datetime(2023, 4, 29, 1, 0, 0, tzinfo = timezone.utc) },
       },
       { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
     )
@@ -49,6 +51,7 @@ int(1);
 bool(true);
 bytes(hex:aabb);
 datetime(2023-04-03T10:00:00Z);
+set([2, "Test", 2023-04-29T01:00:00Z, true]);
 fact(false);
 fact(true);
 builder(true);

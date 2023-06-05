@@ -3,6 +3,7 @@
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 
 use ::biscuit_auth::{builder, error, Authorizer, Biscuit, KeyPair, PrivateKey, PublicKey};
@@ -497,25 +498,64 @@ impl PyPrivateKey {
     }
 }
 
-/// Term values passed from python-land.
-#[derive(FromPyObject)]
-pub enum PyTerm {
+#[derive(PartialEq, Eq, PartialOrd, Ord, FromPyObject)]
+pub enum NestedPyTerm {
     Bool(bool),
     Integer(i64),
     Str(String),
-    Date(Py<PyDateTime>),
+    Date(PyDate),
     Bytes(Vec<u8>),
-    // Set(BTreeSet<Box<PyTerm>>),
 }
 
-impl PyTerm {
+fn inner_term_to_py(t: &builder::Term, py: Python<'_>) -> PyResult<Py<PyAny>> {
+    match t {
+        builder::Term::Integer(i) => Ok((*i).into_py(py)),
+        builder::Term::Str(s) => Ok(s.into_py(py)),
+        builder::Term::Date(d) => Ok(Utc.timestamp_opt(*d as i64, 0).unwrap().into_py(py)),
+        builder::Term::Bytes(bs) => Ok(bs.clone().into_py(py)),
+        builder::Term::Bool(b) => Ok(b.into_py(py)),
+        _ => Err(DataLogError::new_err("Invalid term value".to_string())),
+    }
+}
+
+#[derive(FromPyObject)]
+pub struct PyDate(Py<PyDateTime>);
+
+impl PartialEq for PyDate {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.to_string() == other.0.to_string()
+    }
+}
+
+impl Eq for PyDate {}
+
+impl PartialOrd for PyDate {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.0.to_string().partial_cmp(&other.0.to_string())
+    }
+}
+
+impl Ord for PyDate {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.to_string().cmp(&other.0.to_string())
+    }
+}
+
+/// Term values passed from python-land.
+#[derive(FromPyObject)]
+pub enum PyTerm {
+    Simple(NestedPyTerm),
+    Set(BTreeSet<NestedPyTerm>),
+}
+
+impl NestedPyTerm {
     pub fn to_term(&self) -> PyResult<builder::Term> {
         match self {
-            PyTerm::Integer(i) => Ok((*i).into()),
-            PyTerm::Str(s) => Ok(builder::Term::Str(s.to_string())),
-            PyTerm::Bytes(b) => Ok(b.clone().into()),
-            PyTerm::Bool(b) => Ok((*b).into()),
-            PyTerm::Date(d) => Python::with_gil(|py| {
+            NestedPyTerm::Integer(i) => Ok((*i).into()),
+            NestedPyTerm::Str(s) => Ok(builder::Term::Str(s.to_string())),
+            NestedPyTerm::Bytes(b) => Ok(b.clone().into()),
+            NestedPyTerm::Bool(b) => Ok((*b).into()),
+            NestedPyTerm::Date(PyDate(d)) => Python::with_gil(|py| {
                 let ts = d.extract::<DateTime<Utc>>(py)?.timestamp();
                 if ts < 0 {
                     return Err(PyValueError::new_err(
@@ -523,25 +563,20 @@ impl PyTerm {
                     ));
                 }
                 Ok(builder::Term::Date(ts as u64))
-            }), // todo
-                /*
-                    PyTerm::Date(d) => Python::with_gil(|py| {
-                        let d = d.as_ref(py);
-                        let year = d.get_year();
-                        let month = d.get_month();
-                        let day = d.get_day();
-                        let hour = d.get_hour();
-                        let min = d.get_minute();
-                        let sec = d.get_second();
+            }),
+        }
+    }
+}
 
-                        let naive_date = NaiveDate::from_ymd_opt(year, month as u32, day as u32).unwrap(); // todo handle errors (invalid combos)
-                        let naive_time =
-                            NaiveTime::from_hms_opt(hour as u32, min as u32, sec as u32).unwrap(); // todo handle errors (invalid combos)
-                        let datetime = NaiveDateTime::new(naive_date, naive_time);
-                        let datetime: DateTime<Utc> = DateTime::from_utc(datetime, Utc); // todo handle offset
-                        builder::Term::Date(datetime.timestamp() as u64) // todo handle errors (negative timestamps)
-                    }),
-                */
+impl PyTerm {
+    pub fn to_term(&self) -> PyResult<builder::Term> {
+        match self {
+            PyTerm::Simple(s) => s.to_term(),
+            PyTerm::Set(vs) => vs
+                .iter()
+                .map(|s| s.to_term())
+                .collect::<PyResult<_>>()
+                .map(builder::Term::Set),
         }
     }
 }
@@ -578,17 +613,14 @@ impl PyFact {
             .iter()
             .map(|t| {
                 Python::with_gil(|py| match t {
-                    builder::Term::Integer(i) => Ok((*i).into_py(py)),
-                    builder::Term::Str(s) => Ok(s.into_py(py)),
-                    builder::Term::Date(d) => {
-                        Ok(Utc.timestamp_opt(*d as i64, 0).unwrap().into_py(py))
+                    builder::Term::Parameter(_) => {
+                        Err(DataLogError::new_err("Invalid term value".to_string()))
                     }
-                    builder::Term::Bytes(bs) => Ok(bs.clone().into_py(py)),
-                    builder::Term::Bool(b) => Ok(b.into_py(py)),
-                    //Set(BTreeSet<Term>),
-                    //Variable(String),
-                    //Parameter(String),
-                    _ => Err(DataLogError::new_err("Invalid term value".to_string())),
+                    builder::Term::Variable(_) => {
+                        Err(DataLogError::new_err("Invalid term value".to_string()))
+                    }
+                    builder::Term::Set(_vs) => todo!(),
+                    term => inner_term_to_py(term, py),
                 })
             })
             .collect()
