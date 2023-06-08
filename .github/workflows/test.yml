@@ -36,7 +36,7 @@ jobs:
         pytest
     - name: Test documentation
       run: |
-        pip install sphinx
+        pip install sphinx sphinx-rtd-theme
         cd docs
         make doctest
         make html
