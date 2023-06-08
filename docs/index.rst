@@ -3,9 +3,9 @@ biscuit-python
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
 
-   generated/biscuit_auth
+   basic-use
+   api-reference
 
 This library provides support for the biscuit auth platform in python.
 

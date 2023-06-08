@@ -19,8 +19,7 @@ author = 'Clément Delafargue'
 
 extensions = [
     'sphinx.ext.doctest',
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary'
+    'sphinx.ext.autodoc'
 ]
 
 templates_path = ['_templates']

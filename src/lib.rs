@@ -42,6 +42,8 @@ create_exception!(
 );
 
 /// Builder class allowing to create a biscuit from a datalog block
+///
+/// :param source: a datalog snippet
 #[pyclass(name = "BiscuitBuilder")]
 pub struct PyBiscuitBuilder(builder::BiscuitBuilder);
 
@@ -66,6 +68,9 @@ impl PyBiscuitBuilder {
     }
 
     /// Build a biscuit token, using the provided private key to sign the authority block
+    ///
+    /// :param root: a keypair that will be used to sign the authority block
+    /// :return: a biscuit token
     pub fn build(&self, root: &PyPrivateKey) -> PyResult<PyBiscuit> {
         let keypair = KeyPair::from(&root.0);
         Ok(PyBiscuit(
