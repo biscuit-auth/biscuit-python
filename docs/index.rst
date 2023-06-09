@@ -5,6 +5,7 @@ biscuit-python
    :maxdepth: 2
 
    basic-use
+   datalog
    api-reference
 
 This library provides support for the biscuit auth platform in python.
