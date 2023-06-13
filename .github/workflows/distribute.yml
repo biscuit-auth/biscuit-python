@@ -8,9 +8,7 @@ name: CI
 on:
   push:
     branches:
-      - main
-    tags:
-      - '*'
+      - distribute
   pull_request:
   workflow_dispatch:
 
