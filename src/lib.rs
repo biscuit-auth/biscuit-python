@@ -41,11 +41,15 @@ create_exception!(
     pyo3::exceptions::PyException
 );
 
+/// Builder class allowing to create a biscuit from a datalog block
+///
+/// :param source: a datalog snippet
 #[pyclass(name = "BiscuitBuilder")]
 pub struct PyBiscuitBuilder(builder::BiscuitBuilder);
 
 #[pymethods]
 impl PyBiscuitBuilder {
+    /// Create a builder from a datalog snippet and optional parameter values
     #[new]
     fn new(
         source: Option<String>,
@@ -63,6 +67,10 @@ impl PyBiscuitBuilder {
         Ok(builder)
     }
 
+    /// Build a biscuit token, using the provided private key to sign the authority block
+    ///
+    /// :param root: a keypair that will be used to sign the authority block
+    /// :return: a biscuit token
     pub fn build(&self, root: &PyPrivateKey) -> PyResult<PyBiscuit> {
         let keypair = KeyPair::from(&root.0);
         Ok(PyBiscuit(
@@ -73,13 +81,15 @@ impl PyBiscuitBuilder {
         ))
     }
 
+    /// Add code to the builder. This code snippet cannot contain parameters. See
+    /// `add_code_with_parameters` if you need to provide parameters
     pub fn add_code(&mut self, source: &str) -> PyResult<()> {
         self.0
             .add_code(source)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    // todo: support for public keys
+    /// Add code to the builder, using the provided parameters.
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
@@ -102,24 +112,31 @@ impl PyBiscuitBuilder {
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single fact to the builder. A single fact can be built with
+    /// the `Fact` class and its constructor
     pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
         self.0
             .add_fact(fact.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single rule to the builder. A single rule can be built with
+    /// the `Rule` class and its constructor
     pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
         self.0
             .add_rule(rule.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single check to the builder. A single check can be built with
+    /// the `Check` class and its constructor
     pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
         self.0
             .add_check(check.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Merge a `BlockBuilder` in this `BiscuitBuilder`. The `BlockBuilder` will not be modified
     pub fn merge(&mut self, builder: &PyBlockBuilder) {
         self.0.merge(builder.0.clone())
     }
@@ -129,6 +146,7 @@ impl PyBiscuitBuilder {
     }
 }
 
+/// Representation of a biscuit token that has been parsed and cryptographically verified.
 #[pyclass(name = "Biscuit")]
 pub struct PyBiscuit(Biscuit);
 
@@ -156,7 +174,6 @@ impl PyBiscuit {
     /// Deserializes a token from URL safe base 64 data
     ///
     /// This will check the signature using the root key
-    ///
     #[classmethod]
     pub fn from_base64(_: &PyType, data: &str, root: &PyPublicKey) -> PyResult<PyBiscuit> {
         match Biscuit::from_base64(data, root.0) {
@@ -165,7 +182,7 @@ impl PyBiscuit {
         }
     }
 
-    /// Serializes to raw data
+    /// Serializes to raw bytes
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         match self.0.to_vec() {
             Ok(vec) => Ok(vec),
@@ -177,8 +194,6 @@ impl PyBiscuit {
     pub fn to_base64(&self) -> String {
         self.0.to_base64().unwrap()
     }
-
-    // TODO Revocation IDs
 
     /// Returns the number of blocks in the token
     pub fn block_count(&self) -> usize {
@@ -192,6 +207,7 @@ impl PyBiscuit {
             .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
     }
 
+    /// Create a new `Biscuit` by appending an attenuation block
     pub fn append(&self, block: &PyBlockBuilder) -> PyResult<PyBiscuit> {
         self.0
             .append(block.0.clone())
@@ -210,6 +226,7 @@ pub struct PyAuthorizer(Authorizer);
 
 #[pymethods]
 impl PyAuthorizer {
+    /// Create a new authorizer from a datalog snippet and optional parameter values
     #[new]
     pub fn new(
         source: Option<String>,
@@ -227,6 +244,7 @@ impl PyAuthorizer {
         Ok(builder)
     }
 
+    /// Add code to the builder, using the provided parameters.
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
@@ -249,38 +267,49 @@ impl PyAuthorizer {
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single fact to the authorizer. A single fact can be built with
+    /// the `Fact` class and its constructor
     pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
         self.0
             .add_fact(fact.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single rule to the authorizer. A single rule can be built with
+    /// the `Rule` class and its constructor
     pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
         self.0
             .add_rule(rule.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single check to the authorizer. A single check can be built with
+    /// the `Check` class and its constructor
     pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
         self.0
             .add_check(check.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single policy to the authorizer. A single policy can be built with
+    /// the `Policy` class and its constructor
     pub fn add_policy(&mut self, policy: &PyPolicy) -> PyResult<()> {
         self.0
             .add_policy(policy.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Merge another `Authorizer` in this `Authorizer`. The `BlockBuilder` will not be modified
     pub fn merge(&mut self, builder: &PyAuthorizer) {
         self.0.merge(builder.0.clone())
     }
 
+    /// Merge a `BlockBuilder` in this `Authorizer`. The `BlockBuilder` will not be modified
     pub fn merge_block(&mut self, builder: &PyBlockBuilder) {
         self.0.merge_block(builder.0.clone())
     }
 
+    /// Add a Biscuit` to this `Authorizer`
     pub fn add_token(&mut self, token: &PyBiscuit) -> PyResult<()> {
         self.0
             .add_token(&token.0)
@@ -297,6 +326,11 @@ impl PyAuthorizer {
             .map_err(|error| AuthorizationError::new_err(error.to_string()))
     }
 
+    /// Query the authorizer by returning all the `Fact`s generated by the provided `Rule`. The generated facts won't be
+    /// added to the authorizer world.
+    ///
+    /// This function can be called before `authorize`, but in that case will only return facts that are directly defined,
+    /// not the facts generated by rules.
     pub fn query(&mut self, rule: &PyRule) -> PyResult<Vec<PyFact>> {
         let results = self
             .0
@@ -314,7 +348,7 @@ impl PyAuthorizer {
     }
 }
 
-/// Creates a block to attenuate a token
+/// Builder class allowing to create a block meant to be appended to an existing token
 #[pyclass(name = "BlockBuilder")]
 #[derive(Clone)]
 pub struct PyBlockBuilder(builder::BlockBuilder);
@@ -338,28 +372,36 @@ impl PyBlockBuilder {
         Ok(builder)
     }
 
+    /// Add a single fact to the builder. A single fact can be built with
+    /// the `Fact` class and its constructor
     pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
         self.0
             .add_fact(fact.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single rule to the builder. A single rule can be built with
+    /// the `Rule` class and its constructor
     pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
         self.0
             .add_rule(rule.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Add a single check to the builder. A single check can be built with
+    /// the `Check` class and its constructor
     pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
         self.0
             .add_check(check.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
+    /// Merge a `BlockBuilder` in this `BlockBuilder`. The `BlockBuilder` will not be modified
     pub fn merge(&mut self, builder: &PyBlockBuilder) {
         self.0.merge(builder.0.clone())
     }
 
+    /// Add code to the builder, using the provided parameters.
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
@@ -387,26 +429,31 @@ impl PyBlockBuilder {
     }
 }
 
+/// ed25519 keypair
 #[pyclass(name = "KeyPair")]
 pub struct PyKeyPair(KeyPair);
 
 #[pymethods]
 impl PyKeyPair {
+    /// Generate a random keypair
     #[new]
     pub fn new() -> Self {
         PyKeyPair(KeyPair::new())
     }
 
+    /// Generate a keypair from a private key
     #[classmethod]
     pub fn from_private_key(_: &PyType, private_key: PyPrivateKey) -> Self {
         PyKeyPair(KeyPair::from(&private_key.0))
     }
 
+    /// The public key part
     #[getter]
     pub fn public_key(&self) -> PyPublicKey {
         PyPublicKey(self.0.public())
     }
 
+    /// The private key part
     #[getter]
     pub fn private_key(&self) -> PyPrivateKey {
         PyPrivateKey(self.0.private())
@@ -419,7 +466,7 @@ impl Default for PyKeyPair {
     }
 }
 
-/// Public key
+/// ed25519 public key
 #[derive(Clone)]
 #[pyclass(name = "PublicKey")]
 pub struct PyPublicKey(PublicKey);
@@ -461,6 +508,7 @@ impl PyPublicKey {
 
 #[pyclass(name = "PrivateKey")]
 #[derive(Clone)]
+/// ed25519 private key
 pub struct PyPrivateKey(PrivateKey);
 
 #[pymethods]
@@ -498,6 +546,7 @@ impl PyPrivateKey {
     }
 }
 
+/// Datalog term that can occur in a set
 #[derive(PartialEq, Eq, PartialOrd, Ord, FromPyObject)]
 pub enum NestedPyTerm {
     Bool(bool),
@@ -518,6 +567,7 @@ fn inner_term_to_py(t: &builder::Term, py: Python<'_>) -> PyResult<Py<PyAny>> {
     }
 }
 
+/// Wrapper for a non-naïve python date
 #[derive(FromPyObject)]
 pub struct PyDate(Py<PyDateTime>);
 
@@ -581,11 +631,13 @@ impl PyTerm {
     }
 }
 
+/// Datalog Fact
 #[pyclass(name = "Fact")]
 pub struct PyFact(builder::Fact);
 
 #[pymethods]
 impl PyFact {
+    /// Build a datalog fact from the provided source and optional parameter values
     #[new]
     pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
         let mut fact: builder::Fact = source
@@ -600,11 +652,13 @@ impl PyFact {
         Ok(PyFact(fact))
     }
 
+    /// The fact name
     #[getter]
     pub fn name(&self) -> String {
         self.0.predicate.name.clone()
     }
 
+    /// The fact terms
     #[getter]
     pub fn terms(&self) -> PyResult<Vec<PyObject>> {
         self.0
@@ -631,11 +685,13 @@ impl PyFact {
     }
 }
 
+/// A single datalog rule
 #[pyclass(name = "Rule")]
 pub struct PyRule(builder::Rule);
 
 #[pymethods]
 impl PyRule {
+    /// Build a rule from the source and optional parameter values
     #[new]
     pub fn new(
         source: &str,
@@ -666,11 +722,13 @@ impl PyRule {
     }
 }
 
+/// A single datalog check
 #[pyclass(name = "Check")]
 pub struct PyCheck(builder::Check);
 
 #[pymethods]
 impl PyCheck {
+    /// Build a check from the source and optional parameter values
     #[new]
     pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
         let mut check: builder::Check = source
@@ -691,11 +749,13 @@ impl PyCheck {
     }
 }
 
+/// A single datalog policy
 #[pyclass(name = "Policy")]
 pub struct PyPolicy(builder::Policy);
 
 #[pymethods]
 impl PyPolicy {
+    /// Build a check from the source and optional parameter values
     #[new]
     pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
         let mut policy: builder::Policy = source
@@ -716,6 +776,7 @@ impl PyPolicy {
     }
 }
 
+/// Main module for the biscuit_auth lib
 #[pymodule]
 fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyKeyPair>()?;

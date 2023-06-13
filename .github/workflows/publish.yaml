@@ -1,12 +1,7 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
-
-name: Python application
+name: Publish python app
 
 on:
   push:
-    branches: [ "main" ]
-  pull_request:
     branches: [ "main" ]
 
 permissions:
@@ -34,8 +29,16 @@ jobs:
     - name: Test with pytest
       run: |
         pytest
-    - name: Test documentation
+    - name: Build documentation
       run: |
         pip install sphinx sphinx-rtd-theme
         make -C docs doctest
         make -C docs html
+    - name: Publish documentation
+      run: |
+        zip -r biscuit-python.zip docs/_build/html
+        curl -H "Content-Type: application/zip" \
+             -H "Authorization: Bearer ${{ secrets.NETLIFY_TOKEN }}" \
+             --fail-with-body \
+             --data-binary @biscuit-python.zip \
+             https://api.netlify.com/api/v1/sites/biscuit-python.netlify.app/deploys
