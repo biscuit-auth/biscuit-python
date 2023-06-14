@@ -1,12 +1,36 @@
-# Overview
+# Python bindings for biscuit
 
-This is a _very_ experimental take on Python bindings for the [biscuit_auth](https://docs.rs/biscuit-auth/latest/biscuit_auth/) Rust library. It is very much a work in progress (limited testing, most errors are dropped on the floor, etc). Please don't use this for anything in its current state.
+This library provides python bindings to the [biscuit_auth](https://docs.rs/biscuit-auth/latest/biscuit_auth/) rust library.
 
-Hopefully someday this leads to a production-ready Biscuit library for Python, but this is (currently) not that, and there will definitely be significant API changes before that happens.
+As it is a pre-1.0 version, you can expect some API changes. However, most of the use cases are covered:
 
-This project borrows quite heavily from the approach (and in many cases the actual code) of the [biscuit-wasm](https://github.com/biscuit-auth/biscuit-wasm) project.
+- building a token
+- appending a (first-party) block to a token
+- parsing a token
+- authorizing a token
+- querying an authorizer
 
-# Building/Testing
+Notable missing features are:
+
+- sealing tokens
+- third-party blocks
+- snapshots
+
+There are no blockers for these features, they just have not been properly exposed yet.
+
+## Documentation
+
+Documentation is available at <https://biscuit-python.netlify.app>.
+
+## Installation
+
+`biscuit-python` is published on PyPI: [biscuit-python](https://pypi.org/project/biscuit-python/):
+
+```
+pip install biscuit-python
+```
+
+## Building/Testing
 
 Set up a virtualenv and install the dev dependencies. Plenty of ways to do that... Here's one of them:
 
