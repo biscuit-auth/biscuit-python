@@ -4,6 +4,7 @@ biscuit-python
 .. toctree::
    :maxdepth: 2
 
+   installation
    basic-use
    datalog
    api-reference

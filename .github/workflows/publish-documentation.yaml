@@ -1,4 +1,4 @@
-name: Publish python app
+name: Publish documentation
 
 on:
   push:
