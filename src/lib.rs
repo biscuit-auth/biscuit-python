@@ -1,5 +1,6 @@
 // There seem to be false positives with pyo3
 #![allow(clippy::borrow_deref_ref)]
+use ::biscuit_auth::RootKeyProvider;
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
@@ -40,6 +41,33 @@ create_exception!(
     BiscuitBlockError,
     pyo3::exceptions::PyException
 );
+
+struct PyKeyProvider {
+    py_value: PyObject,
+}
+
+impl RootKeyProvider for PyKeyProvider {
+    fn choose(&self, kid: Option<u32>) -> Result<PublicKey, error::Format> {
+        Python::with_gil(|py| {
+            if self.py_value.as_ref(py).is_callable() {
+                let result = self
+                    .py_value
+                    .call1(py, (kid,))
+                    .map_err(|_| error::Format::UnknownPublicKey)?;
+                let py_pk: PyPublicKey = result
+                    .extract(py)
+                    .map_err(|_| error::Format::UnknownPublicKey)?;
+                Ok(py_pk.0)
+            } else {
+                let py_pk: PyPublicKey = self
+                    .py_value
+                    .extract(py)
+                    .map_err(|_| error::Format::UnknownPublicKey)?;
+                Ok(py_pk.0)
+            }
+        })
+    }
+}
 
 /// Builder class allowing to create a biscuit from a datalog block
 ///
@@ -141,6 +169,10 @@ impl PyBiscuitBuilder {
         self.0.merge(builder.0.clone())
     }
 
+    pub fn set_root_key_id(&mut self, root_key_id: u32) {
+        self.0.set_root_key_id(root_key_id)
+    }
+
     fn __repr__(&self) -> String {
         self.0.to_string()
     }
@@ -162,10 +194,13 @@ impl PyBiscuit {
 
     /// Deserializes a token from raw data
     ///
-    /// This will check the signature using the root key
+    /// This will check the signature using the provided root key (or function)
+    ///
+    /// :param data: a (url-safe) base64-encoded string
+    /// :param root: either a public key or a function taking an integer (or `None`) and returning an public key
     #[classmethod]
-    pub fn from_bytes(_: &PyType, data: &[u8], root: &PyPublicKey) -> PyResult<PyBiscuit> {
-        match Biscuit::from(data, root.0) {
+    pub fn from_bytes(_: &PyType, data: &[u8], root: PyObject) -> PyResult<PyBiscuit> {
+        match Biscuit::from(data, PyKeyProvider { py_value: root }) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
         }
@@ -173,10 +208,13 @@ impl PyBiscuit {
 
     /// Deserializes a token from URL safe base 64 data
     ///
-    /// This will check the signature using the root key
+    /// This will check the signature using the provided root key (or function)
+    ///
+    /// :param data: a (url-safe) base64-encoded string
+    /// :param root: either a public key or a function taking an integer (or `None`) and returning an public key
     #[classmethod]
-    pub fn from_base64(_: &PyType, data: &str, root: &PyPublicKey) -> PyResult<PyBiscuit> {
-        match Biscuit::from_base64(data, root.0) {
+    pub fn from_base64(_: &PyType, data: &str, root: PyObject) -> PyResult<PyBiscuit> {
+        match Biscuit::from_base64(data, PyKeyProvider { py_value: root }) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
         }
