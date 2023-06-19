@@ -171,6 +171,37 @@ check if fact($var, true);
 allow if true;
 """
 
+def test_key_selection():
+    private_key = PrivateKey.from_hex("473b5189232f3f597b5c2f3f9b0d5e28b1ee4e7cce67ec6b7fbf5984157a6b97")
+    root = KeyPair.from_private_key(private_key)
+    other_root = KeyPair()
+
+    def choose_key(kid):
+        if kid is None:
+            return other_root.public_key
+        elif kid == 1:
+            return root.public_key
+        else:
+            raise Exception("Unknown key identifier") 
+
+    biscuit_builder0 = BiscuitBuilder("user({id})", { 'id': "1234" })
+    token0 = biscuit_builder0.build(other_root.private_key).to_base64()
+    biscuit_builder1 = BiscuitBuilder("user({id})", { 'id': "1234" })
+    biscuit_builder1.set_root_key_id(1)
+    token1 = biscuit_builder1.build(private_key).to_base64()
+    biscuit_builder2 = BiscuitBuilder("user({id})", { 'id': "1234" })
+    biscuit_builder2.set_root_key_id(2)
+    token2 = biscuit_builder2.build(private_key).to_base64()
+
+
+    Biscuit.from_base64(token0, choose_key)
+    Biscuit.from_base64(token0, other_root.public_key)
+    Biscuit.from_base64(token1, choose_key)
+    try:
+      Biscuit.from_base64(token2, choose_key)
+    except:
+      pass
+
 def test_complete_lifecycle():
     private_key = PrivateKey.from_hex("473b5189232f3f597b5c2f3f9b0d5e28b1ee4e7cce67ec6b7fbf5984157a6b97")
     root = KeyPair.from_private_key(private_key)
