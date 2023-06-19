@@ -6,7 +6,7 @@ license= { file = "LICENSE" }
 
 [project.urls]
 homepage = "https://biscuitsec.org/usage/python"
-documentation = "https://biscuit-python.netlify.app"
+documentation = "https://python.biscuitsec.org"
 repository = "https://github.com/biscuit-auth/biscuit-python"
 changelog = "https://github.com/biscuit-auth/biscuit-python/blob/main/CHANGELOG.md"
 

@@ -20,7 +20,7 @@ There are no blockers for these features, they just have not been properly expos
 
 ## Documentation
 
-Documentation is available at <https://biscuit-python.netlify.app>.
+Documentation is available at <https://python.biscuitsec.org>.
 
 ## Installation
 
