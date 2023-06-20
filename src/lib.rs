@@ -72,12 +72,24 @@ impl RootKeyProvider for PyKeyProvider {
 /// Builder class allowing to create a biscuit from a datalog block
 ///
 /// :param source: a datalog snippet
+/// :type source: str, optional
+/// :param parameters: values for the parameters in the datalog snippet
+/// :type parameters: dict, optional
+/// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+/// :type scope_parameters: dict, optional
 #[pyclass(name = "BiscuitBuilder")]
 pub struct PyBiscuitBuilder(builder::BiscuitBuilder);
 
 #[pymethods]
 impl PyBiscuitBuilder {
     /// Create a builder from a datalog snippet and optional parameter values
+    ///
+    /// :param source: a datalog snippet
+    /// :type source: str, optional
+    /// :param parameters: values for the parameters in the datalog snippet
+    /// :type parameters: dict, optional
+    /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+    /// :type scope_parameters: dict, optional
     #[new]
     fn new(
         source: Option<String>,
@@ -98,7 +110,9 @@ impl PyBiscuitBuilder {
     /// Build a biscuit token, using the provided private key to sign the authority block
     ///
     /// :param root: a keypair that will be used to sign the authority block
+    /// :type root: PrivateKey
     /// :return: a biscuit token
+    /// :rtype: Biscuit
     pub fn build(&self, root: &PyPrivateKey) -> PyResult<PyBiscuit> {
         let keypair = KeyPair::from(&root.0);
         Ok(PyBiscuit(
@@ -111,6 +125,9 @@ impl PyBiscuitBuilder {
 
     /// Add code to the builder. This code snippet cannot contain parameters. See
     /// `add_code_with_parameters` if you need to provide parameters
+    ///
+    /// :param source: a datalog snippet that will be added to the builder
+    /// :type source: str
     pub fn add_code(&mut self, source: &str) -> PyResult<()> {
         self.0
             .add_code(source)
@@ -118,16 +135,23 @@ impl PyBiscuitBuilder {
     }
 
     /// Add code to the builder, using the provided parameters.
+    ///
+    /// :param source: a datalog snippet
+    /// :type source: str, optional
+    /// :param parameters: values for the parameters in the datalog snippet
+    /// :type parameters: dict, optional
+    /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+    /// :type scope_parameters: dict, optional
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
-        raw_parameters: HashMap<String, PyTerm>,
+        parameters: HashMap<String, PyTerm>,
         scope_parameters: HashMap<String, PyPublicKey>,
     ) -> PyResult<()> {
-        let mut parameters = HashMap::new();
+        let mut params = HashMap::new();
 
-        for (k, raw_value) in raw_parameters {
-            parameters.insert(k, raw_value.to_term()?);
+        for (k, raw_value) in parameters {
+            params.insert(k, raw_value.to_term()?);
         }
 
         let scope_parameters = scope_parameters
@@ -136,12 +160,15 @@ impl PyBiscuitBuilder {
             .collect();
 
         self.0
-            .add_code_with_params(source, parameters, scope_parameters)
+            .add_code_with_params(source, params, scope_parameters)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
     /// Add a single fact to the builder. A single fact can be built with
     /// the `Fact` class and its constructor
+    ///
+    /// :param fact: a datalog fact
+    /// :type fact: Fact
     pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
         self.0
             .add_fact(fact.0.clone())
@@ -150,6 +177,9 @@ impl PyBiscuitBuilder {
 
     /// Add a single rule to the builder. A single rule can be built with
     /// the `Rule` class and its constructor
+    ///
+    /// :param rule: a datalog rule
+    /// :type rule: Rule
     pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
         self.0
             .add_rule(rule.0.clone())
@@ -158,17 +188,27 @@ impl PyBiscuitBuilder {
 
     /// Add a single check to the builder. A single check can be built with
     /// the `Check` class and its constructor
+    ///
+    /// :param check: a datalog check
+    /// :type check: Check
     pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
         self.0
             .add_check(check.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    /// Merge a `BlockBuilder` in this `BiscuitBuilder`. The `BlockBuilder` will not be modified
+    /// Merge a `BlockBuilder` in this `BiscuitBuilder`. The `BlockBuilder` parameter will not be modified
+    ///
+    /// :param builder: a datalog BlockBuilder
+    /// :type builder: BlockBuilder
     pub fn merge(&mut self, builder: &PyBlockBuilder) {
         self.0.merge(builder.0.clone())
     }
 
+    /// Set the root key identifier for this `BiscuitBuilder`
+    ///
+    /// :param root_key_id: the root key identifier
+    /// :type root_key_id: int
     pub fn set_root_key_id(&mut self, root_key_id: u32) {
         self.0.set_root_key_id(root_key_id)
     }
@@ -186,7 +226,8 @@ pub struct PyBiscuit(Biscuit);
 impl PyBiscuit {
     /// Creates a BiscuitBuilder
     ///
-    /// the builder can then create a new token with a root key
+    /// :return: an empty BiscuitBuilder
+    /// :rtype: BiscuitBuilder
     #[staticmethod]
     pub fn builder() -> PyResult<PyBiscuitBuilder> {
         PyBiscuitBuilder::new(None, None, None)
@@ -196,8 +237,12 @@ impl PyBiscuit {
     ///
     /// This will check the signature using the provided root key (or function)
     ///
-    /// :param data: a (url-safe) base64-encoded string
+    /// :param data: raw biscuit bytes
+    /// :type data: bytes
     /// :param root: either a public key or a function taking an integer (or `None`) and returning an public key
+    /// :type root: function,PublicKey
+    /// :return: the parsed and verified biscuit
+    /// :rtype: Biscuit
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8], root: PyObject) -> PyResult<PyBiscuit> {
         match Biscuit::from(data, PyKeyProvider { py_value: root }) {
@@ -211,7 +256,11 @@ impl PyBiscuit {
     /// This will check the signature using the provided root key (or function)
     ///
     /// :param data: a (url-safe) base64-encoded string
+    /// :type data: str
     /// :param root: either a public key or a function taking an integer (or `None`) and returning an public key
+    /// :type root: function,PublicKey
+    /// :return: the parsed and verified biscuit
+    /// :rtype: Biscuit
     #[classmethod]
     pub fn from_base64(_: &PyType, data: &str, root: PyObject) -> PyResult<PyBiscuit> {
         match Biscuit::from_base64(data, PyKeyProvider { py_value: root }) {
@@ -221,6 +270,9 @@ impl PyBiscuit {
     }
 
     /// Serializes to raw bytes
+    ///
+    /// :return: the serialized biscuit
+    /// :rtype: list
     pub fn to_bytes(&self) -> PyResult<Vec<u8>> {
         match self.0.to_vec() {
             Ok(vec) => Ok(vec),
@@ -229,16 +281,27 @@ impl PyBiscuit {
     }
 
     /// Serializes to URL safe base 64 data
+    ///
+    /// :return: the serialized biscuit
+    /// :rtype: str
     pub fn to_base64(&self) -> String {
         self.0.to_base64().unwrap()
     }
 
     /// Returns the number of blocks in the token
+    ///
+    /// :return: the number of blocks
+    /// :rtype: int
     pub fn block_count(&self) -> usize {
         self.0.block_count()
     }
 
     /// Prints a block's content as Datalog code
+    ///
+    /// :param index: the block index
+    /// :type index: int
+    /// :return: the code for the corresponding block
+    /// :rtype: str
     pub fn block_source(&self, index: usize) -> PyResult<String> {
         self.0
             .print_block_source(index)
@@ -246,6 +309,11 @@ impl PyBiscuit {
     }
 
     /// Create a new `Biscuit` by appending an attenuation block
+    ///
+    /// :param block: a builder for the new block
+    /// :type block: BlockBuilder
+    /// :return: the attenuated biscuit
+    /// :rtype: Biscuit
     pub fn append(&self, block: &PyBlockBuilder) -> PyResult<PyBiscuit> {
         self.0
             .append(block.0.clone())
@@ -259,12 +327,26 @@ impl PyBiscuit {
 }
 
 /// The Authorizer verifies a request according to its policies and the provided token
+///
+/// :param source: a datalog snippet
+/// :type source: str, optional
+/// :param parameters: values for the parameters in the datalog snippet
+/// :type parameters: dict, optional
+/// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+/// :type scope_parameters: dict, optional
 #[pyclass(name = "Authorizer")]
 pub struct PyAuthorizer(Authorizer);
 
 #[pymethods]
 impl PyAuthorizer {
     /// Create a new authorizer from a datalog snippet and optional parameter values
+    ///
+    /// :param source: a datalog snippet
+    /// :type source: str, optional
+    /// :param parameters: values for the parameters in the datalog snippet
+    /// :type parameters: dict, optional
+    /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+    /// :type scope_parameters: dict, optional
     #[new]
     pub fn new(
         source: Option<String>,
@@ -283,6 +365,13 @@ impl PyAuthorizer {
     }
 
     /// Add code to the builder, using the provided parameters.
+    ///
+    /// :param source: a datalog snippet
+    /// :type source: str, optional
+    /// :param parameters: values for the parameters in the datalog snippet
+    /// :type parameters: dict, optional
+    /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+    /// :type scope_parameters: dict, optional
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
@@ -307,6 +396,9 @@ impl PyAuthorizer {
 
     /// Add a single fact to the authorizer. A single fact can be built with
     /// the `Fact` class and its constructor
+    ///
+    /// :param fact: a datalog fact
+    /// :type fact: Fact
     pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
         self.0
             .add_fact(fact.0.clone())
@@ -315,6 +407,9 @@ impl PyAuthorizer {
 
     /// Add a single rule to the authorizer. A single rule can be built with
     /// the `Rule` class and its constructor
+    ///
+    /// :param rule: a datalog rule
+    /// :type rule: Rule
     pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
         self.0
             .add_rule(rule.0.clone())
@@ -323,6 +418,9 @@ impl PyAuthorizer {
 
     /// Add a single check to the authorizer. A single check can be built with
     /// the `Check` class and its constructor
+    ///
+    /// :param check: a datalog check
+    /// :type check: Check
     pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
         self.0
             .add_check(check.0.clone())
@@ -331,23 +429,35 @@ impl PyAuthorizer {
 
     /// Add a single policy to the authorizer. A single policy can be built with
     /// the `Policy` class and its constructor
+    ///
+    /// :param policy: a datalog policy
+    /// :type policy: Policy
     pub fn add_policy(&mut self, policy: &PyPolicy) -> PyResult<()> {
         self.0
             .add_policy(policy.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
-    /// Merge another `Authorizer` in this `Authorizer`. The `BlockBuilder` will not be modified
+    /// Merge another `Authorizer` in this `Authorizer`. The `Authorizer` argument will not be modified
+    ///
+    /// :param builder: an Authorizer
+    /// :type builder: Authorizer
     pub fn merge(&mut self, builder: &PyAuthorizer) {
         self.0.merge(builder.0.clone())
     }
 
     /// Merge a `BlockBuilder` in this `Authorizer`. The `BlockBuilder` will not be modified
+    ///
+    /// :param builder: a BlockBuilder
+    /// :type builder: BlockBuilder
     pub fn merge_block(&mut self, builder: &PyBlockBuilder) {
         self.0.merge_block(builder.0.clone())
     }
 
-    /// Add a Biscuit` to this `Authorizer`
+    /// Add a `Biscuit` to this `Authorizer`
+    ///
+    /// :param token: the token to authorize
+    /// :type token: Biscuit
     pub fn add_token(&mut self, token: &PyBiscuit) -> PyResult<()> {
         self.0
             .add_token(&token.0)
@@ -358,6 +468,9 @@ impl PyAuthorizer {
     ///
     /// Returns the index of the matching allow policy, or an error containing the matching deny
     /// policy or a list of the failing checks
+    ///
+    /// :return: the index of the matched allow rule
+    /// :rtype: int
     pub fn authorize(&mut self) -> PyResult<usize> {
         self.0
             .authorize()
@@ -369,6 +482,11 @@ impl PyAuthorizer {
     ///
     /// This function can be called before `authorize`, but in that case will only return facts that are directly defined,
     /// not the facts generated by rules.
+    ///
+    /// :param rule: a rule that will be ran against the authorizer contents
+    /// :type rule: Rule
+    /// :return: a list of generated facts
+    /// :rtype: list
     pub fn query(&mut self, rule: &PyRule) -> PyResult<Vec<PyFact>> {
         let results = self
             .0
@@ -387,12 +505,27 @@ impl PyAuthorizer {
 }
 
 /// Builder class allowing to create a block meant to be appended to an existing token
+///
+/// :param source: a datalog snippet
+/// :type source: str, optional
+/// :param parameters: values for the parameters in the datalog snippet
+/// :type parameters: dict, optional
+/// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+/// :type scope_parameters: dict, optional
 #[pyclass(name = "BlockBuilder")]
 #[derive(Clone)]
 pub struct PyBlockBuilder(builder::BlockBuilder);
 
 #[pymethods]
 impl PyBlockBuilder {
+    /// Create a builder from a datalog snippet and optional parameter values
+    ///
+    /// :param source: a datalog snippet
+    /// :type source: str, optional
+    /// :param parameters: values for the parameters in the datalog snippet
+    /// :type parameters: dict, optional
+    /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+    /// :type scope_parameters: dict, optional
     #[new]
     fn new(
         source: Option<String>,
@@ -412,6 +545,9 @@ impl PyBlockBuilder {
 
     /// Add a single fact to the builder. A single fact can be built with
     /// the `Fact` class and its constructor
+    ///
+    /// :param fact: a datalog fact
+    /// :type fact: Fact
     pub fn add_fact(&mut self, fact: &PyFact) -> PyResult<()> {
         self.0
             .add_fact(fact.0.clone())
@@ -420,6 +556,9 @@ impl PyBlockBuilder {
 
     /// Add a single rule to the builder. A single rule can be built with
     /// the `Rule` class and its constructor
+    ///
+    /// :param rule: a datalog rule
+    /// :type rule: Rule
     pub fn add_rule(&mut self, rule: &PyRule) -> PyResult<()> {
         self.0
             .add_rule(rule.0.clone())
@@ -428,6 +567,9 @@ impl PyBlockBuilder {
 
     /// Add a single check to the builder. A single check can be built with
     /// the `Check` class and its constructor
+    ///
+    /// :param check: a datalog check
+    /// :type check: Check
     pub fn add_check(&mut self, check: &PyCheck) -> PyResult<()> {
         self.0
             .add_check(check.0.clone())
@@ -435,11 +577,21 @@ impl PyBlockBuilder {
     }
 
     /// Merge a `BlockBuilder` in this `BlockBuilder`. The `BlockBuilder` will not be modified
+    ///
+    /// :param builder: a datalog BlockBuilder
+    /// :type builder: BlockBuilder
     pub fn merge(&mut self, builder: &PyBlockBuilder) {
         self.0.merge(builder.0.clone())
     }
 
     /// Add code to the builder, using the provided parameters.
+    ///
+    /// :param source: a datalog snippet
+    /// :type source: str, optional
+    /// :param parameters: values for the parameters in the datalog snippet
+    /// :type parameters: dict, optional
+    /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
+    /// :type scope_parameters: dict, optional
     pub fn add_code_with_parameters(
         &mut self,
         source: &str,
@@ -480,6 +632,11 @@ impl PyKeyPair {
     }
 
     /// Generate a keypair from a private key
+    ///
+    /// :param private_key:
+    /// :type private_key: PrivateKey
+    /// :return: the corresponding keypair
+    /// :rtype: KeyPair
     #[classmethod]
     pub fn from_private_key(_: &PyType, private_key: PyPrivateKey) -> Self {
         PyKeyPair(KeyPair::from(&private_key.0))
@@ -512,16 +669,27 @@ pub struct PyPublicKey(PublicKey);
 #[pymethods]
 impl PyPublicKey {
     /// Serializes a public key to raw bytes
+    ///
+    /// :return: the public key bytes
+    /// :rtype: list
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes()
     }
 
     /// Serializes a public key to a hexadecimal string
+    ///
+    /// :return: the public key bytes (hex-encoded)
+    /// :rtype: str
     pub fn to_hex(&self) -> String {
         hex::encode(self.0.to_bytes())
     }
 
     /// Deserializes a public key from raw bytes
+    ///
+    /// :param data: the raw bytes
+    /// :type data: bytes
+    /// :return: the public key
+    /// :rtype: PublicKey
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PyPublicKey> {
         match PublicKey::from_bytes(data) {
@@ -531,6 +699,11 @@ impl PyPublicKey {
     }
 
     /// Deserializes a public key from a hexadecimal string
+    ///
+    /// :param data: the hex-encoded string
+    /// :type data: str
+    /// :return: the public key
+    /// :rtype: PublicKey
     #[classmethod]
     pub fn from_hex(_: &PyType, data: &str) -> PyResult<PyPublicKey> {
         let data = match hex::decode(data) {
@@ -544,24 +717,35 @@ impl PyPublicKey {
     }
 }
 
+/// ed25519 private key
 #[pyclass(name = "PrivateKey")]
 #[derive(Clone)]
-/// ed25519 private key
 pub struct PyPrivateKey(PrivateKey);
 
 #[pymethods]
 impl PyPrivateKey {
-    /// Serializes a private key to raw bytes
+    /// Serializes a public key to raw bytes
+    ///
+    /// :return: the public key bytes
+    /// :rtype: list
     pub fn to_bytes(&self) -> [u8; 32] {
         self.0.to_bytes()
     }
 
     /// Serializes a private key to a hexadecimal string
+    ///
+    /// :return: the private key bytes (hex-encoded)
+    /// :rtype: str
     pub fn to_hex(&self) -> String {
         hex::encode(self.0.to_bytes())
     }
 
     /// Deserializes a private key from raw bytes
+    ///
+    /// :param data: the raw bytes
+    /// :type data: bytes
+    /// :return: the private key
+    /// :rtype: PrivateKey
     #[classmethod]
     pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PyPrivateKey> {
         match PrivateKey::from_bytes(data) {
@@ -571,6 +755,11 @@ impl PyPrivateKey {
     }
 
     /// Deserializes a private key from a hexadecimal string
+    ///
+    /// :param data: the hex-encoded string
+    /// :type data: str
+    /// :return: the private key
+    /// :rtype: PrivateKey
     #[classmethod]
     pub fn from_hex(_: &PyType, data: &str) -> PyResult<PyPrivateKey> {
         let data = match hex::decode(data) {
