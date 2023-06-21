@@ -858,7 +858,12 @@ impl PyTerm {
     }
 }
 
-/// Datalog Fact
+/// A single datalog Fact
+///
+/// :param source: a datalog fact (without the ending semicolon)
+/// :type source: str
+/// :param parameters: values for the parameters in the datalog fact
+/// :type parameters: dict, optional
 #[pyclass(name = "Fact")]
 pub struct PyFact(builder::Fact);
 
@@ -913,6 +918,13 @@ impl PyFact {
 }
 
 /// A single datalog rule
+///
+/// :param source: a datalog rule (without the ending semicolon)
+/// :type source: str
+/// :param parameters: values for the parameters in the datalog rule
+/// :type parameters: dict, optional
+/// :param scope_parameters: public keys for the public key parameters in the datalog rule
+/// :type scope_parameters: dict, optional
 #[pyclass(name = "Rule")]
 pub struct PyRule(builder::Rule);
 
@@ -950,6 +962,13 @@ impl PyRule {
 }
 
 /// A single datalog check
+///
+/// :param source: a datalog check (without the ending semicolon)
+/// :type source: str
+/// :param parameters: values for the parameters in the datalog check
+/// :type parameters: dict, optional
+/// :param scope_parameters: public keys for the public key parameters in the datalog check
+/// :type scope_parameters: dict, optional
 #[pyclass(name = "Check")]
 pub struct PyCheck(builder::Check);
 
@@ -957,7 +976,11 @@ pub struct PyCheck(builder::Check);
 impl PyCheck {
     /// Build a check from the source and optional parameter values
     #[new]
-    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+    pub fn new(
+        source: &str,
+        parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
+    ) -> PyResult<Self> {
         let mut check: builder::Check = source
             .try_into()
             .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
@@ -965,6 +988,14 @@ impl PyCheck {
             for (k, v) in parameters {
                 check
                     .set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+
+        if let Some(scope_parameters) = scope_parameters {
+            for (k, v) in scope_parameters {
+                check
+                    .set_scope(&k, v.0)
                     .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
             }
         }
@@ -977,6 +1008,13 @@ impl PyCheck {
 }
 
 /// A single datalog policy
+///
+/// :param source: a datalog policy (without the ending semicolon)
+/// :type source: str
+/// :param parameters: values for the parameters in the datalog policy
+/// :type parameters: dict, optional
+/// :param scope_parameters: public keys for the public key parameters in the datalog policy
+/// :type scope_parameters: dict, optional
 #[pyclass(name = "Policy")]
 pub struct PyPolicy(builder::Policy);
 
@@ -984,7 +1022,11 @@ pub struct PyPolicy(builder::Policy);
 impl PyPolicy {
     /// Build a check from the source and optional parameter values
     #[new]
-    pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
+    pub fn new(
+        source: &str,
+        parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
+    ) -> PyResult<Self> {
         let mut policy: builder::Policy = source
             .try_into()
             .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
@@ -992,6 +1034,14 @@ impl PyPolicy {
             for (k, v) in parameters {
                 policy
                     .set(&k, v.to_term()?)
+                    .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
+            }
+        }
+
+        if let Some(scope_parameters) = scope_parameters {
+            for (k, v) in scope_parameters {
+                policy
+                    .set_scope(&k, v.0)
                     .map_err(|e: error::Token| DataLogError::new_err(e.to_string()))?;
             }
         }
