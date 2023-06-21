@@ -47,6 +47,10 @@ def test_biscuit_builder():
     builder.add_check(Check("check if fact($var, {f}) trusting {pubkey}", { 'f': True }, { 'pubkey': pubkey }));
     builder.merge(BlockBuilder('builder(true);'))
 
+    builder.add_code("add_code(true);")
+    builder.add_code("add_code(true, {f});", { 'f': True})
+    builder.add_code("check if add_code(true, {f}) trusting {pubkey};", { 'f': True}, { 'pubkey': pubkey })
+
     assert repr(builder) == """// no root key id set
 string("1234");
 int(1);
@@ -57,11 +61,14 @@ set([2, "Test", 2023-04-29T01:00:00Z, true]);
 fact(false);
 fact(true);
 builder(true);
+add_code(true);
+add_code(true, true);
 head($var) <- fact($var, true);
 head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
 check if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
+check if add_code(true, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 """
 
     builder.build(kp.private_key)
@@ -98,6 +105,9 @@ def test_block_builder():
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
     builder.add_check(Check("check if fact($var, {f}) trusting {pubkey}", { 'f': True }, { 'pubkey': pubkey }));
     builder.merge(BlockBuilder('builder(true);'))
+    builder.add_code("add_code(true);")
+    builder.add_code("add_code(true, {f});", { 'f': True})
+    builder.add_code("check if add_code(true, {f}) trusting {pubkey};", { 'f': True}, { 'pubkey': pubkey })
 
     assert repr(builder) == """string("1234");
 int(1);
@@ -107,11 +117,14 @@ datetime(2023-04-03T10:00:00Z);
 fact(false);
 fact(true);
 builder(true);
+add_code(true);
+add_code(true, true);
 head($var) <- fact($var, true);
 head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
 check if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
+check if add_code(true, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 """
 
 def test_authorizer_builder():
@@ -150,6 +163,9 @@ def test_authorizer_builder():
     builder.add_policy(Policy("allow if fact($var, {f}) trusting {pubkey}", { 'f': True}, { 'pubkey': pubkey }))
     builder.merge_block(BlockBuilder('builder(true);'))
     builder.merge(Authorizer('builder(false);'))
+    builder.add_code("add_code(true);")
+    builder.add_code("add_code(true, {f});", { 'f': True})
+    builder.add_code("check if add_code(true, {f}) trusting {pubkey};", { 'f': True}, { 'pubkey': pubkey })
 
     try:
         builder.authorize()
@@ -158,6 +174,8 @@ def test_authorizer_builder():
 
     assert repr(builder) == """// Facts:
 // origin: authorizer
+add_code(true);
+add_code(true, true);
 bool(true);
 builder(false);
 builder(true);
@@ -178,6 +196,7 @@ head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe79
 check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
 check if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
+check if add_code(true, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 
 // Policies:
 allow if true;
