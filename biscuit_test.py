@@ -13,6 +13,7 @@ def test_fact():
 
 def test_biscuit_builder():
     kp = KeyPair()
+    pubkey = PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189")
 
     builder = BiscuitBuilder(
       """
@@ -31,7 +32,7 @@ def test_biscuit_builder():
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
         'set': {2, True, "Test", datetime(2023, 4, 29, 1, 0, 0, tzinfo = timezone.utc) },
       },
-      { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+      { 'pubkey': pubkey }
     )
 
     builder.add_fact(Fact("fact(false)"));
@@ -40,9 +41,10 @@ def test_biscuit_builder():
     builder.add_rule(Rule(
         "head($var) <- fact($var, {f}) trusting {pubkey}",
         { 'f': True },
-        { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+        { 'pubkey': pubkey }
     ));
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
+    builder.add_check(Check("check if fact($var, {f}) trusting {pubkey}", { 'f': True }, { 'pubkey': pubkey }));
     builder.merge(BlockBuilder('builder(true);'))
 
     assert repr(builder) == """// no root key id set
@@ -59,12 +61,14 @@ head($var) <- fact($var, true);
 head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
+check if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 """
 
     builder.build(kp.private_key)
     assert True
 
 def test_block_builder():
+    pubkey = PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189")
     builder = BlockBuilder(
       """
         string({str});
@@ -80,7 +84,7 @@ def test_block_builder():
         'bytes': [0xaa, 0xbb],
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
       },
-      { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+      { 'pubkey': pubkey }
     )
 
     builder.add_fact(Fact("fact(false)"));
@@ -89,9 +93,10 @@ def test_block_builder():
     builder.add_rule(Rule(
         "head($var) <- fact($var, {f}) trusting {pubkey}",
         { 'f': True },
-        { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+        { 'pubkey': pubkey }
     ));
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
+    builder.add_check(Check("check if fact($var, {f}) trusting {pubkey}", { 'f': True }, { 'pubkey': pubkey }));
     builder.merge(BlockBuilder('builder(true);'))
 
     assert repr(builder) == """string("1234");
@@ -106,9 +111,11 @@ head($var) <- fact($var, true);
 head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
+check if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 """
 
 def test_authorizer_builder():
+    pubkey = PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189")
     builder = Authorizer(
       """
         string({str});
@@ -118,6 +125,7 @@ def test_authorizer_builder():
         datetime({datetime});
         check if true trusting {pubkey};
         allow if true;
+        allow if true trusting {pubkey};
       """,
       { 'str': "1234",
         'int': 1,
@@ -125,7 +133,7 @@ def test_authorizer_builder():
         'bytes': [0xaa, 0xbb],
         'datetime': datetime(2023, 4, 3, 10, 0, 0, tzinfo = timezone.utc),
       },
-      { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+      { 'pubkey': pubkey }
     )
 
     builder.add_fact(Fact("fact(false)"));
@@ -134,9 +142,12 @@ def test_authorizer_builder():
     builder.add_rule(Rule(
         "head($var) <- fact($var, {f}) trusting {pubkey}",
         { 'f': True },
-        { 'pubkey': PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189") }
+        { 'pubkey': pubkey }
     ));
     builder.add_check(Check("check if fact($var, {f})", { 'f': True }));
+    builder.add_check(Check("check if fact($var, {f}) trusting {pubkey}", { 'f': True }, { 'pubkey': pubkey }));
+    builder.add_policy(Policy("allow if fact($var, {f})", { 'f': True}))
+    builder.add_policy(Policy("allow if fact($var, {f}) trusting {pubkey}", { 'f': True}, { 'pubkey': pubkey }))
     builder.merge_block(BlockBuilder('builder(true);'))
     builder.merge(Authorizer('builder(false);'))
 
@@ -166,9 +177,13 @@ head($var) <- fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe79
 // origin: authorizer
 check if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 check if fact($var, true);
+check if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 
 // Policies:
 allow if true;
+allow if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
+allow if fact($var, true);
+allow if fact($var, true) trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;
 """
 
 def test_key_selection():
