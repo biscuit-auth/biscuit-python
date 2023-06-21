@@ -633,7 +633,7 @@ impl PyKeyPair {
 
     /// Generate a keypair from a private key
     ///
-    /// :param private_key:
+    /// :param private_key: the private key
     /// :type private_key: PrivateKey
     /// :return: the corresponding keypair
     /// :rtype: KeyPair
