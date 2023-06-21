@@ -98,11 +98,7 @@ impl PyBiscuitBuilder {
     ) -> PyResult<PyBiscuitBuilder> {
         let mut builder = PyBiscuitBuilder(builder::BiscuitBuilder::new());
         if let Some(source) = source {
-            builder.add_code_with_parameters(
-                &source,
-                parameters.unwrap_or_default(),
-                scope_parameters.unwrap_or_default(),
-            )?;
+            builder.add_code(&source, parameters, scope_parameters)?;
         }
         Ok(builder)
     }
@@ -123,17 +119,6 @@ impl PyBiscuitBuilder {
         ))
     }
 
-    /// Add code to the builder. This code snippet cannot contain parameters. See
-    /// `add_code_with_parameters` if you need to provide parameters
-    ///
-    /// :param source: a datalog snippet that will be added to the builder
-    /// :type source: str
-    pub fn add_code(&mut self, source: &str) -> PyResult<()> {
-        self.0
-            .add_code(source)
-            .map_err(|e| DataLogError::new_err(e.to_string()))
-    }
-
     /// Add code to the builder, using the provided parameters.
     ///
     /// :param source: a datalog snippet
@@ -142,25 +127,33 @@ impl PyBiscuitBuilder {
     /// :type parameters: dict, optional
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
-    pub fn add_code_with_parameters(
+    pub fn add_code(
         &mut self,
         source: &str,
-        parameters: HashMap<String, PyTerm>,
-        scope_parameters: HashMap<String, PyPublicKey>,
+        parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
     ) -> PyResult<()> {
         let mut params = HashMap::new();
 
-        for (k, raw_value) in parameters {
-            params.insert(k, raw_value.to_term()?);
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                params.insert(k, v.to_term()?);
+            }
         }
 
-        let scope_parameters = scope_parameters
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.0))
-            .collect();
+        let scope_params;
+
+        if let Some(scope_parameters) = scope_parameters {
+            scope_params = scope_parameters
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.0))
+                .collect();
+        } else {
+            scope_params = HashMap::new();
+        }
 
         self.0
-            .add_code_with_params(source, params, scope_parameters)
+            .add_code_with_params(source, params, scope_params)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
@@ -355,11 +348,7 @@ impl PyAuthorizer {
     ) -> PyResult<PyAuthorizer> {
         let mut builder = PyAuthorizer(Authorizer::new());
         if let Some(source) = source {
-            builder.add_code_with_parameters(
-                &source,
-                parameters.unwrap_or_default(),
-                scope_parameters.unwrap_or_default(),
-            )?;
+            builder.add_code(&source, parameters, scope_parameters)?;
         }
         Ok(builder)
     }
@@ -372,25 +361,33 @@ impl PyAuthorizer {
     /// :type parameters: dict, optional
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
-    pub fn add_code_with_parameters(
+    pub fn add_code(
         &mut self,
         source: &str,
-        raw_parameters: HashMap<String, PyTerm>,
-        scope_parameters: HashMap<String, PyPublicKey>,
+        parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
     ) -> PyResult<()> {
-        let mut parameters = HashMap::new();
+        let mut params = HashMap::new();
 
-        for (k, raw_value) in raw_parameters {
-            parameters.insert(k, raw_value.to_term()?);
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                params.insert(k, v.to_term()?);
+            }
         }
 
-        let scope_parameters = scope_parameters
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.0))
-            .collect();
+        let scope_params;
+
+        if let Some(scope_parameters) = scope_parameters {
+            scope_params = scope_parameters
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.0))
+                .collect();
+        } else {
+            scope_params = HashMap::new();
+        }
 
         self.0
-            .add_code_with_params(source, parameters, scope_parameters)
+            .add_code_with_params(source, params, scope_params)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
@@ -534,11 +531,7 @@ impl PyBlockBuilder {
     ) -> PyResult<PyBlockBuilder> {
         let mut builder = PyBlockBuilder(builder::BlockBuilder::new());
         if let Some(source) = source {
-            builder.add_code_with_parameters(
-                &source,
-                parameters.unwrap_or_default(),
-                scope_parameters.unwrap_or_default(),
-            )?;
+            builder.add_code(&source, parameters, scope_parameters)?;
         }
         Ok(builder)
     }
@@ -592,25 +585,33 @@ impl PyBlockBuilder {
     /// :type parameters: dict, optional
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
-    pub fn add_code_with_parameters(
+    pub fn add_code(
         &mut self,
         source: &str,
-        raw_parameters: HashMap<String, PyTerm>,
-        scope_parameters: HashMap<String, PyPublicKey>,
+        parameters: Option<HashMap<String, PyTerm>>,
+        scope_parameters: Option<HashMap<String, PyPublicKey>>,
     ) -> PyResult<()> {
-        let mut parameters = HashMap::new();
+        let mut params = HashMap::new();
 
-        for (k, raw_value) in raw_parameters {
-            parameters.insert(k, raw_value.to_term()?);
+        if let Some(parameters) = parameters {
+            for (k, v) in parameters {
+                params.insert(k, v.to_term()?);
+            }
         }
 
-        let scope_parameters = scope_parameters
-            .iter()
-            .map(|(k, v)| (k.to_string(), v.0))
-            .collect();
+        let scope_params;
+
+        if let Some(scope_parameters) = scope_parameters {
+            scope_params = scope_parameters
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.0))
+                .collect();
+        } else {
+            scope_params = HashMap::new();
+        }
 
         self.0
-            .add_code_with_params(source, parameters, scope_parameters)
+            .add_code_with_params(source, params, scope_params)
             .map_err(|e| DataLogError::new_err(e.to_string()))
     }
 
