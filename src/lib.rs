@@ -1,6 +1,7 @@
 // There seem to be false positives with pyo3
 #![allow(clippy::borrow_deref_ref)]
 use ::biscuit_auth::RootKeyProvider;
+use ::biscuit_auth::UnverifiedBiscuit;
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
@@ -1054,6 +1055,57 @@ impl PyPolicy {
     }
 }
 
+/// Representation of a biscuit token that has been parsed but not cryptographically verified
+#[pyclass(name = "UnverifiedBiscuit")]
+pub struct PyUnverifiedBiscuit(UnverifiedBiscuit);
+
+#[pymethods]
+impl PyUnverifiedBiscuit {
+    /// Deserializes a token from URL safe base 64 data
+    ///
+    /// The signature will NOT be checked
+    ///
+    /// :param data: a (url-safe) base64-encoded string
+    /// :type data: str
+    /// :return: the parsed, unverified biscuit
+    /// :rtype: UnverifiedBiscuit
+    #[classmethod]
+    pub fn from_base64(_: &PyType, data: &str) -> PyResult<PyUnverifiedBiscuit> {
+        match UnverifiedBiscuit::from_base64(data) {
+            Ok(biscuit) => Ok(PyUnverifiedBiscuit(biscuit)),
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
+        }
+    }
+
+    /// Returns the root key identifier for this `UnverifiedBiscuit` (or `None` if there is none)
+    ///
+    /// :return: the root key identifier
+    /// :rtype: int
+    pub fn root_key_id(&self) -> Option<u32> {
+        self.0.root_key_id()
+    }
+
+    /// Returns the number of blocks in the token
+    ///
+    /// :return: the number of blocks
+    /// :rtype: int
+    pub fn block_count(&self) -> usize {
+        self.0.block_count()
+    }
+
+    /// Prints a block's content as Datalog code
+    ///
+    /// :param index: the block index
+    /// :type index: int
+    /// :return: the code for the corresponding block
+    /// :rtype: str
+    pub fn block_source(&self, index: usize) -> PyResult<String> {
+        self.0
+            .print_block_source(index)
+            .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
+    }
+}
+
 /// Main module for the biscuit_auth lib
 #[pymodule]
 fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
@@ -1068,6 +1120,7 @@ fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyRule>()?;
     m.add_class::<PyCheck>()?;
     m.add_class::<PyPolicy>()?;
+    m.add_class::<PyUnverifiedBiscuit>()?;
 
     m.add("DataLogError", py.get_type::<DataLogError>())?;
     m.add("AuthorizationError", py.get_type::<AuthorizationError>())?;

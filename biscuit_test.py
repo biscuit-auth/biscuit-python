@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Check, Fact, KeyPair, Policy, PrivateKey, PublicKey, Rule
+from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Check, Fact, KeyPair, Policy, PrivateKey, PublicKey, Rule, UnverifiedBiscuit
 
 def test_fact():
     fact = Fact('fact(1, true, "Test", hex:aabbcc, 2023-04-29T01:00:00Z)')
@@ -302,3 +302,39 @@ def test_private_keys():
     # Not enough bytes
     with pytest.raises(ValueError):
         PrivateKey.from_bytes(b"1230fw9ia3")
+
+
+def test_biscuit_inspection():
+    kp = KeyPair()
+    pubkey = PublicKey.from_hex("acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189")
+
+    builder = BiscuitBuilder(
+      """
+        test({bool});
+        check if true trusting {pubkey};
+      """,
+      { 'bool': True },
+      { 'pubkey': pubkey }
+    )
+
+    print(builder)
+    token1 = builder.build(kp.private_key)
+    print(token1.to_base64())
+
+    builder.set_root_key_id(42)
+    token2 = builder.build(kp.private_key).append(BlockBuilder('test(false);'))
+    print(token2.to_base64())
+    
+    utoken1 = UnverifiedBiscuit.from_base64(token1.to_base64())
+    utoken2 = UnverifiedBiscuit.from_base64(token2.to_base64())
+    
+    assert utoken1.root_key_id() is None
+    assert utoken2.root_key_id() == 42
+
+    assert utoken1.block_count() == 1
+    assert utoken2.block_count() == 2
+
+    assert utoken1.block_source(0) == "test(true);\ncheck if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;\n"
+
+    assert utoken2.block_source(0) == "test(true);\ncheck if true trusting ed25519/acdd6d5b53bfee478bf689f8e012fe7988bf755e3d7c5152947abc149bc20189;\n"
+    assert utoken2.block_source(1) == "test(false);\n"
