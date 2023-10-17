@@ -1124,6 +1124,19 @@ impl PyUnverifiedBiscuit {
             .map(hex::encode)
             .collect()
     }
+
+    pub fn verify(&self, root: PyObject) -> PyResult<PyBiscuit> {
+        // TODO replace with UnverifiedBiscuit::check_signature once  https://github.com/biscuit-auth/biscuit-rust/pull/189 is merged and released
+
+        let data = self
+            .0
+            .to_vec()
+            .map_err(|e| BiscuitValidationError::new_err(e.to_string()))?;
+        match Biscuit::from(data, PyKeyProvider { py_value: root }) {
+            Ok(biscuit) => Ok(PyBiscuit(biscuit)),
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
+        }
+    }
 }
 
 /// Main module for the biscuit_auth lib
