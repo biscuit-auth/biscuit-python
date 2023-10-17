@@ -1115,6 +1115,19 @@ impl PyUnverifiedBiscuit {
             .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
     }
 
+    /// Create a new `UnverifiedBiscuit` by appending an attenuation block
+    ///
+    /// :param block: a builder for the new block
+    /// :type block: BlockBuilder
+    /// :return: the attenuated biscuit
+    /// :rtype: Biscuit
+    pub fn append(&self, block: &PyBlockBuilder) -> PyResult<PyUnverifiedBiscuit> {
+        self.0
+            .append(block.0.clone())
+            .map_err(|e| BiscuitBuildError::new_err(e.to_string()))
+            .map(PyUnverifiedBiscuit)
+    }
+
     /// The revocation ids of the token, encoded as hexadecimal strings
     #[getter]
     pub fn revocation_ids(&self) -> Vec<String> {
