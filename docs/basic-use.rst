@@ -2,7 +2,7 @@ Basic use
 =========
 
 
->>> from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, KeyPair, PrivateKey, PublicKey, Rule
+>>> from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, KeyPair, PrivateKey, PublicKey, Rule, UnverifiedBiscuit
 >>> from datetime import datetime, timedelta, timezone
 
 Create and manage keypairs
@@ -55,6 +55,10 @@ Biscuit tokens can carry a root key identifier, helping the verifying party sele
 >>> token = builder.build(private_key)
 >>> token_string = token.to_base64()
 
+Each block of a token is identified by a unique revocation id. This allows revoking a token and all the tokens derived from it.
+
+>>> revocation_ids = token.revocation_ids
+
 Append a block to a biscuit token
 ---------------------------------
 
@@ -87,6 +91,17 @@ In order to help with key rotation, biscuit tokens can optionally carry a root k
 >>> authorizer.add_token(token)
 >>> authorizer.authorize()
 0
+
+It is possible to parse a biscuit token without verifying its signatures,for instance to inspect its contents, extract revocation ids or append a block.
+
+>>> utoken = UnverifiedBiscuit.from_base64("CAESfQoTCgQxMjM0GAMiCQoHCAoSAxiACBIkCAASII5WVsvM52T91C12wnzButmyzmtGSX_rbM6hCSIJihX2GkDwAcVxTnY8aeMLm-i2R_VzTfIMQZya49ogXO2h2Fg2TJsDcG3udIki9il5PA05lKUwrfPNroS7Qg5e04AyLLcHIiIKII5rh75jrCrgE6Rzw6GVYczMn1IOo287uO4Ef5wp7obY")
+>>> utoken.revocation_ids
+['f001c5714e763c69e30b9be8b647f5734df20c419c9ae3da205ceda1d858364c9b03706dee748922f629793c0d3994a530adf3cdae84bb420e5ed380322cb707']
+>>> attenuated = utoken.append(BlockBuilder("check if true"))
+
+An unverified token can be verified and turned into a regular token
+
+>>> token = utoken.verify(public_key_fn)
 
 Query an authorizer
 -------------------
