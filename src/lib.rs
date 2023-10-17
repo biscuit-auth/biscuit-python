@@ -315,6 +315,16 @@ impl PyBiscuit {
             .map(PyBiscuit)
     }
 
+    /// The revocation ids of the token, encoded as hexadecimal strings
+    #[getter]
+    pub fn revocation_ids(&self) -> Vec<String> {
+        self.0
+            .revocation_identifiers()
+            .into_iter()
+            .map(hex::encode)
+            .collect()
+    }
+
     fn __repr__(&self) -> String {
         self.0.print()
     }
@@ -1103,6 +1113,16 @@ impl PyUnverifiedBiscuit {
         self.0
             .print_block_source(index)
             .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
+    }
+
+    /// The revocation ids of the token, encoded as hexadecimal strings
+    #[getter]
+    pub fn revocation_ids(&self) -> Vec<String> {
+        self.0
+            .revocation_identifiers()
+            .into_iter()
+            .map(hex::encode)
+            .collect()
     }
 }
 
