@@ -1,6 +1,7 @@
 // There seem to be false positives with pyo3
 #![allow(clippy::borrow_deref_ref)]
 use ::biscuit_auth::RootKeyProvider;
+use ::biscuit_auth::UnverifiedBiscuit;
 use chrono::DateTime;
 use chrono::TimeZone;
 use chrono::Utc;
@@ -312,6 +313,16 @@ impl PyBiscuit {
             .append(block.0.clone())
             .map_err(|e| BiscuitBuildError::new_err(e.to_string()))
             .map(PyBiscuit)
+    }
+
+    /// The revocation ids of the token, encoded as hexadecimal strings
+    #[getter]
+    pub fn revocation_ids(&self) -> Vec<String> {
+        self.0
+            .revocation_identifiers()
+            .into_iter()
+            .map(hex::encode)
+            .collect()
     }
 
     fn __repr__(&self) -> String {
@@ -1054,6 +1065,93 @@ impl PyPolicy {
     }
 }
 
+/// Representation of a biscuit token that has been parsed but not cryptographically verified
+#[pyclass(name = "UnverifiedBiscuit")]
+pub struct PyUnverifiedBiscuit(UnverifiedBiscuit);
+
+#[pymethods]
+impl PyUnverifiedBiscuit {
+    /// Deserializes a token from URL safe base 64 data
+    ///
+    /// The signature will NOT be checked
+    ///
+    /// :param data: a (url-safe) base64-encoded string
+    /// :type data: str
+    /// :return: the parsed, unverified biscuit
+    /// :rtype: UnverifiedBiscuit
+    #[classmethod]
+    pub fn from_base64(_: &PyType, data: &str) -> PyResult<PyUnverifiedBiscuit> {
+        match UnverifiedBiscuit::from_base64(data) {
+            Ok(biscuit) => Ok(PyUnverifiedBiscuit(biscuit)),
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
+        }
+    }
+
+    /// Returns the root key identifier for this `UnverifiedBiscuit` (or `None` if there is none)
+    ///
+    /// :return: the root key identifier
+    /// :rtype: int
+    pub fn root_key_id(&self) -> Option<u32> {
+        self.0.root_key_id()
+    }
+
+    /// Returns the number of blocks in the token
+    ///
+    /// :return: the number of blocks
+    /// :rtype: int
+    pub fn block_count(&self) -> usize {
+        self.0.block_count()
+    }
+
+    /// Prints a block's content as Datalog code
+    ///
+    /// :param index: the block index
+    /// :type index: int
+    /// :return: the code for the corresponding block
+    /// :rtype: str
+    pub fn block_source(&self, index: usize) -> PyResult<String> {
+        self.0
+            .print_block_source(index)
+            .map_err(|e| BiscuitBlockError::new_err(e.to_string()))
+    }
+
+    /// Create a new `UnverifiedBiscuit` by appending an attenuation block
+    ///
+    /// :param block: a builder for the new block
+    /// :type block: BlockBuilder
+    /// :return: the attenuated biscuit
+    /// :rtype: Biscuit
+    pub fn append(&self, block: &PyBlockBuilder) -> PyResult<PyUnverifiedBiscuit> {
+        self.0
+            .append(block.0.clone())
+            .map_err(|e| BiscuitBuildError::new_err(e.to_string()))
+            .map(PyUnverifiedBiscuit)
+    }
+
+    /// The revocation ids of the token, encoded as hexadecimal strings
+    #[getter]
+    pub fn revocation_ids(&self) -> Vec<String> {
+        self.0
+            .revocation_identifiers()
+            .into_iter()
+            .map(hex::encode)
+            .collect()
+    }
+
+    pub fn verify(&self, root: PyObject) -> PyResult<PyBiscuit> {
+        // TODO replace with UnverifiedBiscuit::check_signature once  https://github.com/biscuit-auth/biscuit-rust/pull/189 is merged and released
+
+        let data = self
+            .0
+            .to_vec()
+            .map_err(|e| BiscuitValidationError::new_err(e.to_string()))?;
+        match Biscuit::from(data, PyKeyProvider { py_value: root }) {
+            Ok(biscuit) => Ok(PyBiscuit(biscuit)),
+            Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
+        }
+    }
+}
+
 /// Main module for the biscuit_auth lib
 #[pymodule]
 fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
@@ -1068,6 +1166,7 @@ fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyRule>()?;
     m.add_class::<PyCheck>()?;
     m.add_class::<PyPolicy>()?;
+    m.add_class::<PyUnverifiedBiscuit>()?;
 
     m.add("DataLogError", py.get_type::<DataLogError>())?;
     m.add("AuthorizationError", py.get_type::<AuthorizationError>())?;
