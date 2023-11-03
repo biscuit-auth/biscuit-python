@@ -113,3 +113,9 @@ Query an authorizer
 'user'
 >>> facts[0].terms
 ['1234']
+
+Save and load snapshots
+-----------------------
+
+>>> snapshot = authorizer.base64_snapshot()
+>>> parsed = Authorizer.from_base64_snapshot(snapshot)
