@@ -7,9 +7,9 @@ import pytest
 from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Check, Fact, KeyPair, Policy, PrivateKey, PublicKey, Rule, UnverifiedBiscuit
 
 def test_fact():
-    fact = Fact('fact(1, true, "Test", hex:aabbcc, 2023-04-29T01:00:00Z)')
+    fact = Fact('fact(1, true, "", "Test", hex:aabbcc, 2023-04-29T01:00:00Z)')
     assert fact.name == "fact"
-    assert fact.terms == [1, True, "Test", [0xaa, 0xbb, 0xcc], datetime(2023, 4, 29, 1, 0, 0, tzinfo = timezone.utc)]
+    assert fact.terms == [1, True, "", "Test", [0xaa, 0xbb, 0xcc], datetime(2023, 4, 29, 1, 0, 0, tzinfo = timezone.utc)]
 
 def test_biscuit_builder():
     kp = KeyPair()
