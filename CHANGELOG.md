@@ -2,6 +2,7 @@
 
 - support for `UnverifiedBiscuit`
 - support for snapshots
+- biscuit-rust 4.0.0
 
 # 0.2.0
 

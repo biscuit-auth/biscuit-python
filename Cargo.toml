@@ -1,6 +1,6 @@
 [package]
 name = "biscuit-python"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [lib]
@@ -8,7 +8,7 @@ name = "biscuit_auth"
 crate-type = ["cdylib"]
 
 [dependencies]
-biscuit-auth = "3.2.0"
+biscuit-auth = "4.0.0"
 pyo3 = { version = "0.18.3", features = ["extension-module", "chrono"]}
 hex = "0.4"
 base64 = "0.13.0"
