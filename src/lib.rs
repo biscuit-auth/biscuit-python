@@ -507,6 +507,53 @@ impl PyAuthorizer {
             .collect())
     }
 
+    /// Take a snapshot of the authorizer and return it, base64-encoded
+    ///
+    /// :return: a snapshot as a base64-encoded string
+    /// :rtype: str
+    pub fn base64_snapshot(&self) -> PyResult<String> {
+        self.0
+            .to_base64_snapshot()
+            .map_err(|error| BiscuitSerializationError::new_err(error.to_string()))
+    }
+
+    /// Take a snapshot of the authorizer and return it, as raw bytes
+    ///
+    /// :return: a snapshot as raw bytes
+    /// :rtype: bytes
+    pub fn raw_snapshot(&self) -> PyResult<Vec<u8>> {
+        self.0
+            .to_raw_snapshot()
+            .map_err(|error| BiscuitSerializationError::new_err(error.to_string()))
+    }
+
+    /// Build an authorizer from a base64-encoded snapshot
+    ///
+    /// :param input: base64-encoded snapshot
+    /// :type input: str
+    /// :return: the authorizer
+    /// :rtype: Authorizer
+    #[classmethod]
+    pub fn from_base64_snapshot(_: &PyType, input: &str) -> PyResult<Self> {
+        Ok(PyAuthorizer(
+            Authorizer::from_base64_snapshot(input)
+                .map_err(|error| BiscuitValidationError::new_err(error.to_string()))?,
+        ))
+    }
+
+    /// Build an authorizer from a snapshot's raw bytes
+    ///
+    /// :param input: raw snapshot bytes
+    /// :type input: bytes
+    /// :return: the authorizer
+    /// :rtype: Authorizer
+    #[classmethod]
+    pub fn from_raw_snapshot(_: &PyType, input: &[u8]) -> PyResult<Self> {
+        Ok(PyAuthorizer(Authorizer::from_raw_snapshot(input).map_err(
+            |error| BiscuitValidationError::new_err(error.to_string()),
+        )?))
+    }
+
     fn __repr__(&self) -> String {
         self.0.to_string()
     }

@@ -1,3 +1,8 @@
+# 0.2.1
+
+- support for `UnverifiedBiscuit`
+- support for snapshots
+
 # 0.2.0
 
 - support for root key id (#5)
