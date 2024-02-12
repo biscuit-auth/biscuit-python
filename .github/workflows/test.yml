@@ -39,3 +39,7 @@ jobs:
         pip install sphinx sphinx-rtd-theme
         make -C docs doctest
         make -C docs html
+    - name: Test types
+      uses: jpetrucciani/mypy-check@master
+      with:
+        requirements_file: "requirements-dev.txt"
