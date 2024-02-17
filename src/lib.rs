@@ -701,6 +701,32 @@ impl PyKeyPair {
         PyKeyPair(KeyPair::from(&private_key.0))
     }
 
+    /// Generate a keypair from a DER buffer
+    ///
+    /// :param bytes: private key bytes in DER format
+    /// :type private_key: PrivateKey
+    /// :return: the corresponding keypair
+    /// :rtype: KeyPair
+    #[classmethod]
+    pub fn from_private_key_der(_: &PyType, der: &[u8]) -> PyResult<Self> {
+        let kp = KeyPair::from_private_key_der(der)
+            .map_err(|e: error::Format| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(PyKeyPair(kp))
+    }
+
+    /// Generate a keypair from a PEM buffer
+    ///
+    /// :param bytes: private key bytes in PEM format
+    /// :type private_key: PrivateKey
+    /// :return: the corresponding keypair
+    /// :rtype: KeyPair
+    #[classmethod]
+    pub fn from_private_key_pem(_: &PyType, pem: &str) -> PyResult<Self> {
+        let kp = KeyPair::from_private_key_pem(pem)
+            .map_err(|e: error::Format| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
+        Ok(PyKeyPair(kp))
+    }
+
     /// The public key part
     #[getter]
     pub fn public_key(&self) -> PyPublicKey {
