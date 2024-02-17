@@ -372,6 +372,23 @@ class KeyPair:
     @classmethod
     def from_private_key(cls, private_key: PrivateKey) -> KeyPair: ...
 
+    # Generate a keypair from a DER buffer
+    #
+    # :param bytes: private key bytes in DER format
+    # :type private_key: PrivateKey
+    # :return: the corresponding keypair
+    # :rtype: KeyPair
+    @classmethod
+    def from_private_key_der(cls, der: bytes) -> KeyPair: ...
+
+    #
+    # :param bytes: private key bytes in PEM format
+    # :type private_key: PrivateKey
+    # :return: the corresponding keypair
+    # :rtype: KeyPair
+    @classmethod
+    def from_private_key_pem(cls, pem: str) -> KeyPair: ...
+
     # The public key part
     @property
     def public_key(self) -> PublicKey: ...

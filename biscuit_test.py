@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from biscuit_auth import Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Check, Fact, KeyPair, Policy, PrivateKey, PublicKey, Rule, UnverifiedBiscuit
+from biscuit_auth import KeyPair,Authorizer, Biscuit, BiscuitBuilder, BlockBuilder, Check, Fact, KeyPair, Policy, PrivateKey, PublicKey, Rule, UnverifiedBiscuit
 
 def test_fact():
     fact = Fact('fact(1, true, "", "Test", hex:aabbcc, 2023-04-29T01:00:00Z)')
@@ -418,3 +418,17 @@ def test_append_on_unverified():
 
     utoken2 = utoken.append(BlockBuilder("check if true"))
     assert utoken2.block_source(3) == "check if true;\n"
+
+
+def test_keypair_from_private_key_der():
+    private_key_der = bytes.fromhex("302e020100300506032b6570042204200499694d0da05dcac40052663e71d50c1539465f8926dfe92033cf7aaad53d65")
+    private_key_hex = "0499694d0da05dcac40052663e71d50c1539465f8926dfe92033cf7aaad53d65"
+    kp = KeyPair.from_private_key_der(der=private_key_der)
+    assert kp.private_key.to_hex() == private_key_hex
+
+
+def test_keypair_from_private_key_pem():
+    private_key_pem = "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIASZaU0NoF3KxABSZj5x1QwVOUZfiSbf6SAzz3qq1T1l\n-----END PRIVATE KEY-----"
+    private_key_hex = "0499694d0da05dcac40052663e71d50c1539465f8926dfe92033cf7aaad53d65"
+    kp = KeyPair.from_private_key_pem(pem=private_key_pem)
+    assert kp.private_key.to_hex() == private_key_hex
