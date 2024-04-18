@@ -3,12 +3,15 @@
 use ::biscuit_auth::RootKeyProvider;
 use ::biscuit_auth::UnverifiedBiscuit;
 use chrono::DateTime;
+use chrono::Duration;
 use chrono::TimeZone;
 use chrono::Utc;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 
-use ::biscuit_auth::{builder, error, Authorizer, Biscuit, KeyPair, PrivateKey, PublicKey};
+use ::biscuit_auth::{
+    builder, error, Authorizer, AuthorizerLimits, Biscuit, KeyPair, PrivateKey, PublicKey,
+};
 
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
@@ -341,6 +344,17 @@ impl PyBiscuit {
 #[pyclass(name = "Authorizer")]
 pub struct PyAuthorizer(Authorizer);
 
+#[pyclass(name = "AuthorizerLimits")]
+#[derive(Clone)]
+pub struct PyAuthorizerLimits {
+    #[pyo3(get, set)]
+    pub max_facts: u64,
+    #[pyo3(get, set)]
+    pub max_iterations: u64,
+    #[pyo3(get, set)]
+    pub max_time: Duration,
+}
+
 #[pymethods]
 impl PyAuthorizer {
     /// Create a new authorizer from a datalog snippet and optional parameter values
@@ -444,6 +458,29 @@ impl PyAuthorizer {
         self.0
             .add_policy(policy.0.clone())
             .map_err(|e| DataLogError::new_err(e.to_string()))
+    }
+
+    /// Returns the runtime limits of the authorizer
+    ///
+    /// Those limits cover all the executions under the `authorize`, `query` and `query_all` methods
+    pub fn limits(&self) -> PyAuthorizerLimits {
+        let limits = self.0.limits();
+        PyAuthorizerLimits {
+            max_facts: limits.max_facts,
+            max_iterations: limits.max_iterations,
+            max_time: Duration::from_std(limits.max_time).expect("Duration out of range"),
+        }
+    }
+
+    /// Sets the runtime limits of the authorizer
+    ///
+    /// Those limits cover all the executions under the `authorize`, `query` and `query_all` methods
+    pub fn set_limits(&mut self, limits: &PyAuthorizerLimits) {
+        self.0.set_limits(AuthorizerLimits {
+            max_facts: limits.max_facts,
+            max_iterations: limits.max_iterations,
+            max_time: Duration::to_std(&limits.max_time).expect("Duration out of range"),
+        })
     }
 
     /// Merge another `Authorizer` in this `Authorizer`. The `Authorizer` argument will not be modified
