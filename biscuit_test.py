@@ -432,3 +432,16 @@ def test_keypair_from_private_key_pem():
     private_key_hex = "0499694d0da05dcac40052663e71d50c1539465f8926dfe92033cf7aaad53d65"
     kp = KeyPair.from_private_key_pem(pem=private_key_pem)
     assert kp.private_key.to_hex() == private_key_hex
+
+
+def test_append_third_party_block():
+    root_kp = KeyPair()
+    external_kp = KeyPair()
+
+    builder = BiscuitBuilder("user({user});", {'user': "123"})
+    biscuit = builder.build(root_kp.private_key)
+
+    third_party_block = BlockBuilder("external_fact({fact});", {'fact': "456"})
+    new_biscuit = biscuit.append_third_party_block(external_kp, third_party_block)
+
+    assert new_biscuit.block_external_key(1).to_hex() == external_kp.public_key.to_hex()
