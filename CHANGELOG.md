@@ -1,3 +1,9 @@
+# 0.3.0
+
+- biscuit-rust 5.0.0
+- support for `der` format for key pairs (#15)
+- add type stubs (#13)
+
 # 0.2.1
 
 - support for `UnverifiedBiscuit`
