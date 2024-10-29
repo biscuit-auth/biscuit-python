@@ -1,3 +1,8 @@
+# 0.3.1
+
+- musl wheels (#26)
+- set limits on authorizer (#16)
+
 # 0.3.0
 
 - biscuit-rust 5.0.0
