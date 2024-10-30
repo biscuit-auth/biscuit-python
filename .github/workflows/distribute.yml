@@ -12,6 +12,10 @@ on:
     tags:
       - '*'
 
+env:
+  UNIX_PYTHON_VERSIONS: 3.7 3.8 3.9 3.10 3.11 3.12 3.13 pypy3.7 pypy3.8 pypy3.9 pypy3.10
+  WINDOWS_PYTHON_VERSIONS: 3.7 3.8 3.9 3.10 3.11 3.12
+
 permissions:
   contents: read
 
@@ -30,7 +34,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter ${{ env.UNIX_PYTHON_VERSIONS }}
           sccache: 'true'
           manylinux: auto
       - name: Upload wheels
@@ -63,7 +67,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter ${{ env.UNIX_PYTHON_VERSIONS }}
           sccache: 'true'
           manylinux: musllinux_1_1
           container: off
@@ -88,7 +92,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter ${{ env.WINDOWS_PYTHON_VERSIONS }}
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v3
@@ -110,7 +114,7 @@ jobs:
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter
+          args: --release --out dist --interpreter ${{ env.UNIX_PYTHON_VERSIONS }}
           sccache: 'true'
       - name: Upload wheels
         uses: actions/upload-artifact@v3
