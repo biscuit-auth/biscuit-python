@@ -1,3 +1,9 @@
+# 0.3.2
+
+- build wheels for more python versions (#28):
+  - unix: 3.7, 3.8, 3.9, 3.10, 3.11, 3.12, 3.13, pypy3.7, pypy3.8, pypy3.9, pypy3.10
+  - windows: 3.7, 3.8, 3.9, 3.10, 3.11, 3.12
+
 # 0.3.1
 
 - musl wheels (#26)
