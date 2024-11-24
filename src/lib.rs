@@ -1,6 +1,8 @@
 // There seem to be false positives with pyo3
 #![allow(clippy::borrow_deref_ref)]
 use ::biscuit_auth::RootKeyProvider;
+use ::biscuit_auth::ThirdPartyBlock;
+use ::biscuit_auth::ThirdPartyRequest;
 use ::biscuit_auth::UnverifiedBiscuit;
 use chrono::DateTime;
 use chrono::Duration;
@@ -216,6 +218,22 @@ impl PyBiscuitBuilder {
     }
 }
 
+#[pyclass(name="ThirdPartyBlock")]
+pub struct PyThirdPartyBlock(ThirdPartyBlock);
+
+
+#[pyclass(name="ThirdPartyRequest")]
+pub struct PyThirdPartyRequest(ThirdPartyRequest);
+
+#[pymethods]
+impl PyThirdPartyRequest {
+    pub fn create_block(&self, private_key: &PyPrivateKey, response: &PyBlockBuilder) -> PyResult<PyThirdPartyBlock> {
+        self.0.clone().create_block(&private_key.0, response.0.clone()).map(PyThirdPartyBlock).map_err(|e| BiscuitBuildError::new_err(e.to_string()))
+    }
+}
+
+
+
 /// Representation of a biscuit token that has been parsed and cryptographically verified.
 #[pyclass(name = "Biscuit")]
 pub struct PyBiscuit(Biscuit);
@@ -327,6 +345,18 @@ impl PyBiscuit {
             .into_iter()
             .map(hex::encode)
             .collect()
+    }
+
+    pub fn third_party_request(&self) -> PyResult<PyThirdPartyRequest> {
+        self.0.third_party_request().map_err(|e| BiscuitBuildError::new_err(e.to_string())).map(PyThirdPartyRequest)
+    }
+
+    pub fn append_third_party(&self, public_key: &PyPublicKey, block: &PyThirdPartyBlock) -> PyResult<PyBiscuit> {
+        self.0.append_third_party(public_key.0, block.0.clone()).map_err(|e| BiscuitBuildError::new_err(e.to_string())).map(PyBiscuit)
+    }
+
+    pub fn external_public_keys(&self) -> Vec<Option<PyPublicKey>> {
+        self.0.external_public_keys().into_iter().map(|e| e.map(PyPublicKey)).collect()
     }
 
     fn __repr__(&self) -> String {

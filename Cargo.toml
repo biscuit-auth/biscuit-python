@@ -8,7 +8,9 @@ name = "biscuit_auth"
 crate-type = ["cdylib"]
 
 [dependencies]
-biscuit-auth = { version = "5.0.0", features = ["pem"] }
+biscuit-auth = { git = "https://github.com/adamh-oai/biscuit-rust.git", branch = "third-party", features = [
+    "pem",
+] } #biscuit-auth = { version = "5.0.0", features = ["pem"] }
 pyo3 = { version = "0.22.6", features = ["extension-module", "chrono"] }
 hex = "0.4"
 base64 = "0.13.0"
