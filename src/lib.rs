@@ -53,19 +53,18 @@ struct PyKeyProvider {
 impl RootKeyProvider for PyKeyProvider {
     fn choose(&self, kid: Option<u32>) -> Result<PublicKey, error::Format> {
         Python::with_gil(|py| {
-            if self.py_value.as_ref(py).is_callable() {
-                let result = self
-                    .py_value
-                    .call1(py, (kid,))
+            let bound = self.py_value.bind(py);
+            if bound.is_callable() {
+                let result = bound
+                    .call1((kid,))
                     .map_err(|_| error::Format::UnknownPublicKey)?;
                 let py_pk: PyPublicKey = result
-                    .extract(py)
+                    .extract()
                     .map_err(|_| error::Format::UnknownPublicKey)?;
                 Ok(py_pk.0)
             } else {
-                let py_pk: PyPublicKey = self
-                    .py_value
-                    .extract(py)
+                let py_pk: PyPublicKey = bound
+                    .extract()
                     .map_err(|_| error::Format::UnknownPublicKey)?;
                 Ok(py_pk.0)
             }
@@ -95,6 +94,7 @@ impl PyBiscuitBuilder {
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
     #[new]
+    #[pyo3(signature = (source=None, parameters=None, scope_parameters=None))]
     fn new(
         source: Option<String>,
         parameters: Option<HashMap<String, PyTerm>>,
@@ -131,6 +131,7 @@ impl PyBiscuitBuilder {
     /// :type parameters: dict, optional
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
+    #[pyo3(signature = (source, parameters=None, scope_parameters=None))]
     pub fn add_code(
         &mut self,
         source: &str,
@@ -241,7 +242,7 @@ impl PyBiscuit {
     /// :return: the parsed and verified biscuit
     /// :rtype: Biscuit
     #[classmethod]
-    pub fn from_bytes(_: &PyType, data: &[u8], root: PyObject) -> PyResult<PyBiscuit> {
+    pub fn from_bytes(_: &Bound<PyType>, data: &[u8], root: PyObject) -> PyResult<PyBiscuit> {
         match Biscuit::from(data, PyKeyProvider { py_value: root }) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
@@ -259,7 +260,7 @@ impl PyBiscuit {
     /// :return: the parsed and verified biscuit
     /// :rtype: Biscuit
     #[classmethod]
-    pub fn from_base64(_: &PyType, data: &str, root: PyObject) -> PyResult<PyBiscuit> {
+    pub fn from_base64(_: &Bound<PyType>, data: &str, root: PyObject) -> PyResult<PyBiscuit> {
         match Biscuit::from_base64(data, PyKeyProvider { py_value: root }) {
             Ok(biscuit) => Ok(PyBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
@@ -366,6 +367,7 @@ impl PyAuthorizer {
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
     #[new]
+    #[pyo3(signature = (source=None, parameters=None, scope_parameters=None))]
     pub fn new(
         source: Option<String>,
         parameters: Option<HashMap<String, PyTerm>>,
@@ -386,6 +388,7 @@ impl PyAuthorizer {
     /// :type parameters: dict, optional
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
+    #[pyo3(signature = (source, parameters=None, scope_parameters=None))]
     pub fn add_code(
         &mut self,
         source: &str,
@@ -571,7 +574,7 @@ impl PyAuthorizer {
     /// :return: the authorizer
     /// :rtype: Authorizer
     #[classmethod]
-    pub fn from_base64_snapshot(_: &PyType, input: &str) -> PyResult<Self> {
+    pub fn from_base64_snapshot(_: &Bound<PyType>, input: &str) -> PyResult<Self> {
         Ok(PyAuthorizer(
             Authorizer::from_base64_snapshot(input)
                 .map_err(|error| BiscuitValidationError::new_err(error.to_string()))?,
@@ -585,7 +588,7 @@ impl PyAuthorizer {
     /// :return: the authorizer
     /// :rtype: Authorizer
     #[classmethod]
-    pub fn from_raw_snapshot(_: &PyType, input: &[u8]) -> PyResult<Self> {
+    pub fn from_raw_snapshot(_: &Bound<PyType>, input: &[u8]) -> PyResult<Self> {
         Ok(PyAuthorizer(Authorizer::from_raw_snapshot(input).map_err(
             |error| BiscuitValidationError::new_err(error.to_string()),
         )?))
@@ -619,6 +622,7 @@ impl PyBlockBuilder {
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
     #[new]
+    #[pyo3(signature = (source=None, parameters=None, scope_parameters=None))]
     fn new(
         source: Option<String>,
         parameters: Option<HashMap<String, PyTerm>>,
@@ -680,6 +684,7 @@ impl PyBlockBuilder {
     /// :type parameters: dict, optional
     /// :param scope_parameters: public keys for the public key parameters in the datalog snippet
     /// :type scope_parameters: dict, optional
+    #[pyo3(signature = (source, parameters=None, scope_parameters=None))]
     pub fn add_code(
         &mut self,
         source: &str,
@@ -734,7 +739,7 @@ impl PyKeyPair {
     /// :return: the corresponding keypair
     /// :rtype: KeyPair
     #[classmethod]
-    pub fn from_private_key(_: &PyType, private_key: PyPrivateKey) -> Self {
+    pub fn from_private_key(_: &Bound<PyType>, private_key: PyPrivateKey) -> Self {
         PyKeyPair(KeyPair::from(&private_key.0))
     }
 
@@ -745,7 +750,7 @@ impl PyKeyPair {
     /// :return: the corresponding keypair
     /// :rtype: KeyPair
     #[classmethod]
-    pub fn from_private_key_der(_: &PyType, der: &[u8]) -> PyResult<Self> {
+    pub fn from_private_key_der(_: &Bound<PyType>, der: &[u8]) -> PyResult<Self> {
         let kp = KeyPair::from_private_key_der(der)
             .map_err(|e: error::Format| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyKeyPair(kp))
@@ -758,7 +763,7 @@ impl PyKeyPair {
     /// :return: the corresponding keypair
     /// :rtype: KeyPair
     #[classmethod]
-    pub fn from_private_key_pem(_: &PyType, pem: &str) -> PyResult<Self> {
+    pub fn from_private_key_pem(_: &Bound<PyType>, pem: &str) -> PyResult<Self> {
         let kp = KeyPair::from_private_key_pem(pem)
             .map_err(|e: error::Format| pyo3::exceptions::PyValueError::new_err(e.to_string()))?;
         Ok(PyKeyPair(kp))
@@ -813,7 +818,7 @@ impl PyPublicKey {
     /// :return: the public key
     /// :rtype: PublicKey
     #[classmethod]
-    pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PyPublicKey> {
+    pub fn from_bytes(_: &Bound<PyType>, data: &[u8]) -> PyResult<PyPublicKey> {
         match PublicKey::from_bytes(data) {
             Ok(key) => Ok(PyPublicKey(key)),
             Err(error) => Err(PyValueError::new_err(error.to_string())),
@@ -827,7 +832,7 @@ impl PyPublicKey {
     /// :return: the public key
     /// :rtype: PublicKey
     #[classmethod]
-    pub fn from_hex(_: &PyType, data: &str) -> PyResult<PyPublicKey> {
+    pub fn from_hex(_: &Bound<PyType>, data: &str) -> PyResult<PyPublicKey> {
         let data = match hex::decode(data) {
             Ok(data) => data,
             Err(error) => return Err(PyValueError::new_err(error.to_string())),
@@ -869,7 +874,7 @@ impl PyPrivateKey {
     /// :return: the private key
     /// :rtype: PrivateKey
     #[classmethod]
-    pub fn from_bytes(_: &PyType, data: &[u8]) -> PyResult<PyPrivateKey> {
+    pub fn from_bytes(_: &Bound<PyType>, data: &[u8]) -> PyResult<PyPrivateKey> {
         match PrivateKey::from_bytes(data) {
             Ok(key) => Ok(PyPrivateKey(key)),
             Err(error) => Err(PyValueError::new_err(error.to_string())),
@@ -883,7 +888,7 @@ impl PyPrivateKey {
     /// :return: the private key
     /// :rtype: PrivateKey
     #[classmethod]
-    pub fn from_hex(_: &PyType, data: &str) -> PyResult<PyPrivateKey> {
+    pub fn from_hex(_: &Bound<PyType>, data: &str) -> PyResult<PyPrivateKey> {
         let data = match hex::decode(data) {
             Ok(data) => data,
             Err(error) => return Err(PyValueError::new_err(error.to_string())),
@@ -993,6 +998,7 @@ pub struct PyFact(builder::Fact);
 impl PyFact {
     /// Build a datalog fact from the provided source and optional parameter values
     #[new]
+    #[pyo3(signature = (source, parameters=None))]
     pub fn new(source: &str, parameters: Option<HashMap<String, PyTerm>>) -> PyResult<Self> {
         let mut fact: builder::Fact = source
             .try_into()
@@ -1054,6 +1060,7 @@ pub struct PyRule(builder::Rule);
 impl PyRule {
     /// Build a rule from the source and optional parameter values
     #[new]
+    #[pyo3(signature = (source, parameters=None, scope_parameters=None))]
     pub fn new(
         source: &str,
         parameters: Option<HashMap<String, PyTerm>>,
@@ -1097,6 +1104,7 @@ pub struct PyCheck(builder::Check);
 #[pymethods]
 impl PyCheck {
     /// Build a check from the source and optional parameter values
+    #[pyo3(signature = (source, parameters=None, scope_parameters=None))]
     #[new]
     pub fn new(
         source: &str,
@@ -1144,6 +1152,7 @@ pub struct PyPolicy(builder::Policy);
 impl PyPolicy {
     /// Build a check from the source and optional parameter values
     #[new]
+    #[pyo3(signature = (source, parameters=None, scope_parameters=None))]
     pub fn new(
         source: &str,
         parameters: Option<HashMap<String, PyTerm>>,
@@ -1190,7 +1199,7 @@ impl PyUnverifiedBiscuit {
     /// :return: the parsed, unverified biscuit
     /// :rtype: UnverifiedBiscuit
     #[classmethod]
-    pub fn from_base64(_: &PyType, data: &str) -> PyResult<PyUnverifiedBiscuit> {
+    pub fn from_base64(_: &Bound<PyType>, data: &str) -> PyResult<PyUnverifiedBiscuit> {
         match UnverifiedBiscuit::from_base64(data) {
             Ok(biscuit) => Ok(PyUnverifiedBiscuit(biscuit)),
             Err(error) => Err(BiscuitValidationError::new_err(error.to_string())),
@@ -1264,7 +1273,7 @@ impl PyUnverifiedBiscuit {
 
 /// Main module for the biscuit_auth lib
 #[pymodule]
-fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
+fn biscuit_auth(py: Python, m: &Bound<PyModule>) -> PyResult<()> {
     m.add_class::<PyKeyPair>()?;
     m.add_class::<PyPublicKey>()?;
     m.add_class::<PyPrivateKey>()?;
@@ -1278,17 +1287,17 @@ fn biscuit_auth(py: Python, m: &PyModule) -> PyResult<()> {
     m.add_class::<PyPolicy>()?;
     m.add_class::<PyUnverifiedBiscuit>()?;
 
-    m.add("DataLogError", py.get_type::<DataLogError>())?;
-    m.add("AuthorizationError", py.get_type::<AuthorizationError>())?;
-    m.add("BiscuitBuildError", py.get_type::<BiscuitBuildError>())?;
-    m.add("BiscuitBlockError", py.get_type::<BiscuitBlockError>())?;
+    m.add("DataLogError", py.get_type_bound::<DataLogError>())?;
+    m.add("AuthorizationError", py.get_type_bound::<AuthorizationError>())?;
+    m.add("BiscuitBuildError", py.get_type_bound::<BiscuitBuildError>())?;
+    m.add("BiscuitBlockError", py.get_type_bound::<BiscuitBlockError>())?;
     m.add(
         "BiscuitValidationError",
-        py.get_type::<BiscuitValidationError>(),
+        py.get_type_bound::<BiscuitValidationError>(),
     )?;
     m.add(
         "BiscuitSerializationError",
-        py.get_type::<BiscuitSerializationError>(),
+        py.get_type_bound::<BiscuitSerializationError>(),
     )?;
 
     Ok(())
